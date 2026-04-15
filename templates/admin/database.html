@@ -3,6 +3,8 @@
 
 {% block head_extra %}
   <meta name="csrf-token" content="{{ csrf_token() }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -14,9 +16,29 @@
     </div>
 
     <div class="d-flex gap-2 align-items-center">
-      <button id="exportAllBtn" class="btn btn-sm btn-outline-secondary" title="Export visible table to CSV">
-        <i class="fas fa-file-csv"></i> Export CSV
-      </button>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Export options">
+        <button id="exportCsvBtn" class="btn btn-outline-success" title="Export visible table to CSV">
+          <i class="fas fa-file-csv"></i> CSV
+        </button>
+        <button id="exportExcelBtn" class="btn btn-outline-success" title="Export visible table to Excel">
+          <i class="fas fa-file-excel"></i> Excel
+        </button>
+        <button id="exportPdfBtn" class="btn btn-outline-danger" title="Export visible table to PDF">
+          <i class="fas fa-file-pdf"></i> PDF
+        </button>
+      </div>
+
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Export all tables">
+          <i class="fas fa-database"></i> Export All
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="#" id="exportAllCsv"><i class="fas fa-file-csv"></i> All Tables (CSV)</a></li>
+          <li><a class="dropdown-item" href="#" id="exportAllExcel"><i class="fas fa-file-excel"></i> All Tables (Excel)</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="#" id="exportAllJson"><i class="fas fa-code"></i> All Tables (JSON)</a></li>
+        </ul>
+      </div>
 
       <div class="form-check form-switch">
         <input class="form-check-input" type="checkbox" id="compactToggle">
@@ -218,6 +240,7 @@ function applyPagination(tabPane) {
 // Build modal form fields (basic type guess)
 function buildForm(data, editable=false) {
   const form = document.getElementById('recordForm');
+  if (!form) return; // Form not available in modal
   form.innerHTML = '';
 
   // Fields that should never be editable
@@ -264,6 +287,18 @@ function buildForm(data, editable=false) {
   });
 }
 
+// Export to JSON
+function exportToJson(data, filename) {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename || 'export.json';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 // Export single table to CSV (visible rows)
 function exportTableToCSV(table, filename) {
   const cols = Array.from(table.tHead.rows[0].cells).slice(0, -1).map(th => th.innerText.trim());
@@ -279,6 +314,120 @@ function exportTableToCSV(table, filename) {
   document.body.appendChild(link);
   link.click();
   link.remove();
+}
+
+// Export table to HTML (for Excel compatibility)
+function exportTableToExcel(table, filename) {
+  const html = table.outerHTML.replace(/&nbsp;/gi, '&#160;');
+  const blob = new Blob(['<html><body>' + html + '</body></html>'], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename || 'export.xls';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+// Export table to PDF (basic HTML/CSS method)
+function exportTableToPDF(table, filename) {
+  if (typeof html2pdf === 'undefined') {
+    alert('PDF library not loaded. Export as Excel instead.');
+    return;
+  }
+  
+  const element = table.cloneNode(true);
+  const opt = {
+    margin: 10,
+    filename: filename || 'export.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { orientation: 'landscape', unit: 'mm', format: 'a4' }
+  };
+  html2pdf().set(opt).from(element).save();
+}
+
+// Export all tables to JSON
+function exportAllTablesToJson() {
+  const allData = {};
+  document.querySelectorAll('.tab-pane').forEach(pane => {
+    const table = pane.querySelector('table');
+    if (!table) return;
+    const modelName = table.dataset.model;
+    const rows = Array.from(table.tBodies[0].rows).map(tr => {
+      try {
+        return JSON.parse(tr.dataset.json);
+      } catch { return {}; }
+    });
+    allData[modelName] = rows;
+  });
+  const timestamp = new Date().toISOString().slice(0, 10);
+  exportToJson(allData, `database-export-${timestamp}.json`);
+}
+
+// Export all tables to individual CSV files (zipped or sequential)
+function exportAllTablesToCSV() {
+  const allCsvData = {};
+  
+  document.querySelectorAll('.tab-pane').forEach(pane => {
+    const table = pane.querySelector('table');
+    if (!table) return;
+    
+    const modelName = table.dataset.model;
+    const cols = Array.from(table.tHead.rows[0].cells).slice(0, -1).map(th => th.innerText.trim());
+    const rows = Array.from(table.tBodies[0].rows).map(r => {
+      return Array.from(r.cells).slice(0, -1).map(td => csvEscape(td.innerText.trim()));
+    });
+    
+    const csv = [cols.map(csvEscape).join(',')].concat(rows.map(r => r.join(',')));
+    allCsvData[modelName] = csv.join('\n');
+  });
+  
+  // Combine all tables into one CSV with section headers
+  const combinedCsv = Object.entries(allCsvData).map(([modelName, csvContent]) => {
+    return `\n\n=== ${modelName.toUpperCase()} ===\n${csvContent}`;
+  }).join('');
+  
+  const blob = new Blob([combinedCsv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `all-tables-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+// Export all tables to Excel workbook with multiple sheets
+function exportAllTablesToExcel() {
+  const wb = XLSX.utils.book_new();
+  
+  document.querySelectorAll('.tab-pane').forEach(pane => {
+    const table = pane.querySelector('table');
+    if (!table) return;
+    
+    const modelName = table.dataset.model;
+    const cols = Array.from(table.tHead.rows[0].cells).slice(0, -1).map(th => th.innerText.trim());
+    const rows = Array.from(table.tBodies[0].rows).map(r => {
+      return Array.from(r.cells).slice(0, -1).map(td => td.innerText.trim());
+    });
+    
+    // Create sheet data: header + rows
+    const sheetData = [cols, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    
+    // Auto-size columns
+    const colWidths = cols.map((col, idx) => {
+      const maxLen = Math.max(col.length, ...rows.map(r => String(r[idx] || '').length));
+      return { wch: Math.min(maxLen + 2, 50) };
+    });
+    ws['!cols'] = colWidths;
+    
+    // Add sheet to workbook (sanitize sheet name)
+    const sheetName = modelName.replace(/[\/\?\*\:\[\]]/g, '').substring(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+  
+  // Save workbook
+  XLSX.writeFile(wb, `all-tables-${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 // Initialize per-tab behaviors
@@ -424,12 +573,41 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!e.target.closest('#context-menu')) contextMenu.style.display = 'none';
   });
 
-  // Export visible table when pressing the top Export button
-  exportAllBtn.addEventListener('click', () => {
+  // Export buttons
+  document.getElementById('exportCsvBtn')?.addEventListener('click', () => {
     const visibleTable = document.querySelector('.tab-pane.show table');
     if (!visibleTable) return alert('No table visible to export.');
     const model = visibleTable.dataset.model || 'export';
     exportTableToCSV(visibleTable, `${model}-${new Date().toISOString().slice(0,10)}.csv`);
+  });
+
+  document.getElementById('exportExcelBtn')?.addEventListener('click', () => {
+    const visibleTable = document.querySelector('.tab-pane.show table');
+    if (!visibleTable) return alert('No table visible to export.');
+    const model = visibleTable.dataset.model || 'export';
+    exportTableToExcel(visibleTable, `${model}-${new Date().toISOString().slice(0,10)}.xls`);
+  });
+
+  document.getElementById('exportPdfBtn')?.addEventListener('click', () => {
+    const visibleTable = document.querySelector('.tab-pane.show table');
+    if (!visibleTable) return alert('No table visible to export.');
+    const model = visibleTable.dataset.model || 'export';
+    exportTableToPDF(visibleTable, `${model}-${new Date().toISOString().slice(0,10)}.pdf`);
+  });
+
+  document.getElementById('exportAllCsv')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    exportAllTablesToCSV();
+  });
+
+  document.getElementById('exportAllExcel')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    exportAllTablesToExcel();
+  });
+
+  document.getElementById('exportAllJson')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    exportAllTablesToJson();
   });
 
   // Keyboard: press Escape to hide context menu

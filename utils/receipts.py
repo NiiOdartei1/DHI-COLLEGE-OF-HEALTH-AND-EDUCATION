@@ -9,14 +9,14 @@ FONT_DIR = os.path.join("static", "fonts")
 
 class ReceiptPDF(FPDF):
     def header(self):
-        logo_path = os.path.join("static", "NEDO_GLOBAL.png")
+        logo_path = os.path.join("static", "DHI-LOGO.PNG")
         if os.path.exists(logo_path):
             self.image(logo_path, x=10, y=8, w=25)
 
         self.set_xy(40, 10)
         self.set_font("DejaVu-Bold", size=18)
         self.set_text_color(34, 34, 34)
-        self.cell(0, 10, "Institution Name", ln=True, align="C")
+        self.cell(0, 10, "DHI - COLLEGE OF HEALTH AND EDUCATION", ln=True, align="C")
 
         self.set_font("DejaVu", size=12)
         self.set_text_color(80, 80, 80)

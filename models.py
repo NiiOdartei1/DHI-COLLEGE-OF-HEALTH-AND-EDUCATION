@@ -14,6 +14,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.ext.hybrid import hybrid_property
 from utils.extensions import db
 
+
 """
 FIXED ADMIN MODEL
 The issue: @property role was overriding the role column
@@ -894,12 +895,18 @@ class StudentProfile(db.Model):
     guardian_phone = db.Column(db.String(20))
     guardian_email = db.Column(db.String(100))
     guardian_address = db.Column(db.Text)
+    student_type = db.Column(db.String(20), default='online')  # 'online' or 'regular' - determines LMS access
 
     user = db.relationship('User', back_populates='student_profile')
     bookings = db.relationship('AppointmentBooking', back_populates='student', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f"<StudentProfile {self.index_number} - {self.current_programme} Level {self.programme_level}>"
+    
+    @property
+    def is_online_student(self):
+        """Returns True if student is an online student with full LMS access"""
+        return self.student_type == 'online'
     
     @property
     def class_group(self):
@@ -1015,6 +1022,45 @@ class StudentFeeBalance(db.Model):
 
     __table_args__ = (db.UniqueConstraint('student_id', 'fee_structure_id', name='uq_student_fee_structure'),)
 
+class FeePaymentRule(db.Model):
+    """
+    Flexible payment rules for students based on programme, level, and study format.
+    Allows admins to configure different payment percentages and deadlines for each student group.
+    """
+    __tablename__ = 'fee_payment_rule'
+
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Student group identifiers (can use wildcard '*' for any)
+    programme_name = db.Column(db.String(120), nullable=False)  # e.g., 'Early Childhood Education' or '*' for all
+    programme_level = db.Column(db.String(20), nullable=False)  # e.g., '100', '200', or '*' for all
+    study_format = db.Column(db.String(50), nullable=False)  # e.g., 'Online', 'Regular', or '*' for all
+    
+    # Payment requirements
+    minimum_payment_percentage = db.Column(db.Float, nullable=False, default=0.0)  # 0-100, e.g., 50 means 50% upfront
+    allow_installments = db.Column(db.Boolean, default=True)  # Whether installment payments allowed
+    
+    # Deadline for first payment (relative to semester start)
+    payment_deadline_days = db.Column(db.Integer, nullable=True)  # Days after semester start, None = no deadline
+    
+    # Audit fields
+    academic_year = db.Column(db.String(20), nullable=True)  # Optional: if specific to a year
+    created_by_admin_id = db.Column(db.Integer, db.ForeignKey('admin.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    created_by = db.relationship('Admin', backref='fee_payment_rules')
+    
+    __table_args__ = (
+        db.UniqueConstraint(
+            'programme_name', 'programme_level', 'study_format', 'academic_year',
+            name='uq_fee_payment_rule'
+        ),
+    )
+    
+    def __repr__(self):
+        return f"<FeePaymentRule {self.programme_name} L{self.programme_level} {self.study_format} {self.minimum_payment_percentage}%>"
+
 class Quiz(db.Model):
     __tablename__ = 'quiz'
     id = db.Column(db.Integer, primary_key=True)
@@ -1082,44 +1128,78 @@ class Option(db.Model):
     
 class StudentAnswer(db.Model):
     __tablename__ = 'student_answers'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    attempt_id = db.Column(db.Integer, db.ForeignKey('quiz_attempt.id', ondelete='CASCADE'), nullable=False, index=True)
-    question_id = db.Column(db.Integer, db.ForeignKey('question.id', ondelete='CASCADE'), nullable=False, index=True)
-    quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id', ondelete='CASCADE'), nullable=False)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
-    selected_option_id = db.Column(db.Integer, db.ForeignKey('options.id', ondelete='SET NULL'), nullable=True)
+
+    attempt_id = db.Column(
+        db.Integer,
+        db.ForeignKey('quiz_attempt.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    question_id = db.Column(
+        db.Integer,
+        db.ForeignKey('question.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    quiz_id = db.Column(
+        db.Integer,
+        db.ForeignKey('quiz.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    student_id = db.Column(
+        db.Integer,
+        db.ForeignKey('user.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    selected_option_id = db.Column(
+        db.Integer,
+        db.ForeignKey('options.id', ondelete='SET NULL'),
+        nullable=True
+    )
+
     answer_text = db.Column(db.Text, nullable=True)
     is_correct = db.Column(db.Boolean, default=False)
     time_spent_seconds = db.Column(db.Integer, default=0)
+
     answered_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    # ---------------- RELATIONSHIPS ----------------
     attempt = db.relationship('QuizAttempt', backref='answers', lazy='joined')
     question = db.relationship('Question', backref='student_answers')
     quiz = db.relationship('Quiz', backref='student_answers')
     student = db.relationship('User', backref='quiz_answers')
     selected_option = db.relationship('Option', backref='selected_by_students')
-    
+
+    # ---------------- INDEXES & CONSTRAINTS ----------------
     __table_args__ = (
         db.UniqueConstraint('attempt_id', 'question_id', name='uq_attempt_question'),
         db.Index('ix_student_answers_attempt_id', 'attempt_id'),
         db.Index('ix_student_answers_student_id', 'student_id'),
         db.Index('ix_student_answers_quiz_id', 'quiz_id'),
     )
-    
+
+    # ---------------- HELPERS ----------------
     def __repr__(self):
         return f'<StudentAnswer attempt={self.attempt_id} q={self.question_id}>'
-    
+
     @property
     def answer_value(self):
-        return self.selected_option_id if self.selected_option_id is not None else self.answer_text
-    
+        return self.selected_option_id if self.selected_option_id else self.answer_text
+
     @property
     def is_answered(self):
-        return self.selected_option_id is not None or self.answer_text is not None
-    
+        return bool(self.selected_option_id or self.answer_text)
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -1132,20 +1212,15 @@ class StudentAnswer(db.Model):
             'time_spent_seconds': self.time_spent_seconds,
             'answered_at': self.answered_at.isoformat() if self.answered_at else None,
         }
-            
+
     def mark_correct(self, points=None):
-        """Mark this answer as correct and optionally award points"""
         self.is_correct = True
         if points is not None:
             self.points_earned = points
-    
+
     def mark_incorrect(self):
-        """Mark this answer as incorrect"""
         self.is_correct = False
         self.points_earned = 0.0
-
-from datetime import datetime
-from utils.extensions import db
 
 
 class QuizAttempt(db.Model):

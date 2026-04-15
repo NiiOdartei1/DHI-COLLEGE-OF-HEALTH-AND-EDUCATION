@@ -23,6 +23,7 @@ from PIL import Image, ImageDraw
 import textwrap
 from utils.id_card import generate_student_id_card_pdf
 from utils.result_builder import ResultBuilder
+from utils.permission_decorators import online_student_required
 from utils.results_manager import ResultManager
 from utils.result_templates import get_template_path
 
@@ -86,6 +87,7 @@ from datetime import timedelta
 
 @student_bp.route('/courses', methods=['GET', 'POST'])
 @login_required
+@online_student_required()
 def register_courses():
     form = CourseRegistrationForm()
     student = current_user
@@ -193,6 +195,7 @@ def register_courses():
 
 @student_bp.route('/courses/reset', methods=['POST'])
 @login_required
+@online_student_required()
 def reset_registration():
     student = current_user
 
@@ -216,6 +219,7 @@ def reset_registration():
 
 @student_bp.route('/assessments')
 @login_required
+@online_student_required()
 def view_assessments():
     """Show student's quiz, assignment, and exam results with raw scores and feedback"""
     student_user = current_user
@@ -324,6 +328,7 @@ def view_assessments():
 
 @student_bp.route('/my_results')
 @login_required
+@online_student_required()
 def my_results():
     data = ResultBuilder.semester(current_user.id)
 
@@ -341,6 +346,8 @@ def my_results():
 
 # View results as HTML
 @student_bp.route("/results/view/<student_id>")
+@login_required
+@online_student_required()
 def view_results(student_id):
     from utils.result_render import ResultRenderer
 
@@ -352,6 +359,7 @@ from utils.result_render import render_pdf as render_results_pdf
 
 @student_bp.route("/results/pdf/<student_id>")
 @login_required
+@online_student_required()
 def download_result(student_id):
     data = ResultBuilder.semester(student_id)
     if not data["released"]:
@@ -365,6 +373,7 @@ def download_result(student_id):
 
 @student_bp.route("/student/results")
 @login_required
+@online_student_required()
 def semester_results():
     data = ResultBuilder.semester(current_user.id)
 
@@ -384,6 +393,7 @@ from services.result_builder import ResultBuilder
 
 @student_bp.route("/student/transcript")
 @login_required
+@online_student_required()
 def transcript():
     data = ResultBuilder.transcript(current_user.id)
 
@@ -395,6 +405,7 @@ def transcript():
 
 @student_bp.route('/courses/download-pdf', methods=['GET'])
 @login_required
+@online_student_required()
 def download_registered_courses_pdf():
     """Download registered courses as PDF"""
     from flask import send_file
@@ -426,7 +437,7 @@ def download_registered_courses_pdf():
         
         # Generate PDF with logo
         import os
-        logo_path = os.path.join(os.path.dirname(__file__), 'static', 'NEW-DHI-LOGO.jpeg')
+        logo_path = os.path.join(os.path.dirname(__file__), 'static', 'NEW-DHI-LOGO.png')
         
         pdf = generate_course_registration_pdf(
             student=student,
@@ -460,6 +471,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 @student_bp.route('/timetable')
 @login_required
+@online_student_required()
 def view_timetable():
     """View class timetable (tertiary version with programme/level)"""
     if current_user.role != 'student':
@@ -591,6 +603,7 @@ def view_timetable():
 
 @student_bp.route('/download_timetable')
 @login_required
+@online_student_required()
 def download_timetable():
     """Download timetable as PDF (tertiary version)"""
     student_profile = StudentProfile.query.filter_by(user_id=current_user.user_id).first()
@@ -837,6 +850,97 @@ def student_fees():
     )
 
 
+def get_fee_payment_rule(programme, level, study_format, academic_year=None):
+    """
+    Fetch the applicable FeePaymentRule for a student based on their profile.
+    Rules can use wildcards (*) to match any programme, level, or study_format.
+    More specific rules take precedence over wildcard rules.
+    """
+    from models import FeePaymentRule
+    
+    # Build list of potential rule combinations, ordered by specificity
+    rules = []
+    
+    # Exact match (highest precedence)
+    rule = FeePaymentRule.query.filter_by(
+        programme_name=programme,
+        programme_level=level,
+        study_format=study_format,
+        academic_year=academic_year
+    ).first()
+    if rule:
+        return rule
+    
+    # Programme + Level (wildcard study_format)
+    rule = FeePaymentRule.query.filter_by(
+        programme_name=programme,
+        programme_level=level,
+        study_format='*',
+        academic_year=academic_year
+    ).first()
+    if rule:
+        return rule
+    
+    # Programme + Study Format (wildcard level)
+    rule = FeePaymentRule.query.filter_by(
+        programme_name=programme,
+        programme_level='*',
+        study_format=study_format,
+        academic_year=academic_year
+    ).first()
+    if rule:
+        return rule
+    
+    # Level + Study Format (wildcard programme)
+    rule = FeePaymentRule.query.filter_by(
+        programme_name='*',
+        programme_level=level,
+        study_format=study_format,
+        academic_year=academic_year
+    ).first()
+    if rule:
+        return rule
+    
+    # Any level (programme + study_format)
+    rule = FeePaymentRule.query.filter_by(
+        programme_name=programme,
+        programme_level='*',
+        study_format='*',
+        academic_year=academic_year
+    ).first()
+    if rule:
+        return rule
+    
+    # All wildcards for this year (lowest precedence)
+    rule = FeePaymentRule.query.filter_by(
+        programme_name='*',
+        programme_level='*',
+        study_format='*',
+        academic_year=academic_year
+    ).first()
+    if rule:
+        return rule
+    
+    # No rule found for this year, try None (year-agnostic rules)
+    rule = FeePaymentRule.query.filter_by(
+        programme_name=programme,
+        programme_level=level,
+        study_format=study_format,
+        academic_year=None
+    ).first()
+    if rule:
+        return rule
+    
+    # All wildcards with no year constraint (fallback)
+    rule = FeePaymentRule.query.filter_by(
+        programme_name='*',
+        programme_level='*',
+        study_format='*',
+        academic_year=None
+    ).first()
+    
+    return rule
+
 @student_bp.route('/pay-fees', methods=['GET', 'POST'])
 @login_required
 def pay_fees():
@@ -916,10 +1020,18 @@ def pay_fees():
     ).distinct().order_by(ProgrammeFeeStructure.academic_year.desc()).all()
     available_years = [y[0] for y in years]
 
-    # Determine if installments are allowed based on level
-    # Level 100 (freshers): Full payment only
-    # Level 200+: Installments allowed
-    allow_installments = int(level) >= 200
+    # Get flexible fee payment rule (replaces hardcoded logic)
+    payment_rule = get_fee_payment_rule(programme, level, study_format, year)
+    
+    if payment_rule:
+        allow_installments = payment_rule.allow_installments
+        minimum_percentage = payment_rule.minimum_payment_percentage
+        payment_deadline_days = payment_rule.payment_deadline_days
+    else:
+        # Fallback if no rule exists: level 100 = full payment, 200+ = installments
+        allow_installments = int(level) >= 200
+        minimum_percentage = 100 if int(level) < 200 else 0
+        payment_deadline_days = None
 
     return render_template(
         'student/pay_fees.html',
@@ -935,7 +1047,9 @@ def pay_fees():
         programme=programme,
         level=level,
         allow_installments=allow_installments,
-        student_level=int(level)
+        student_level=int(level),
+        minimum_payment_percentage=minimum_percentage,
+        payment_deadline_days=payment_deadline_days
     )
 
 @student_bp.route('/download-receipt/<int:txn_id>')
@@ -1142,6 +1256,7 @@ def format_time(t):
 
 @student_bp.route('/exam-timetable', methods=['GET', 'POST'])
 @login_required
+@online_student_required()
 def exam_timetable_page():
     return render_template('student/exam_timetable_input.html')
 
@@ -1192,6 +1307,7 @@ def generate_logo_qr(data: str,
 
 @student_bp.route('/exam-timetable/download', methods=['POST'])
 @login_required
+@online_student_required()
 def download_student_exam_timetable():
     """Download exam timetable for tertiary student (by index number)"""
     index_number = request.form.get("index_number")
@@ -1397,6 +1513,7 @@ def download_student_exam_timetable():
 # Teacher Assessment System
 @student_bp.route('/teacher-assessment', methods=['GET', 'POST'])
 @login_required
+@online_student_required()
 def teacher_assessment():
     """Teacher assessment form (tertiary students by programme/level)"""
     if not current_user.is_student:

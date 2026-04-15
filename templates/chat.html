@@ -163,12 +163,11 @@
     <header class="right-head" id="rightHead">
       <button id="backToConversations" class="icon-btn" title="Back to Conversations" style="display: none;"><i class="fas fa-arrow-left"></i></button>
       <div class="right-head-left">
-        <div style="width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: linear-gradient(135deg, #3b82f6, #1e40af); color: white; font-weight: 700; flex-shrink: 0;" id="convAvatar">A</div>
-        <div id="rightAvatar" class="conv-avatar">DM</div>
+        <div id="rightAvatar" class="conv-avatar"></div>
         <div>
           <div class="title" id="rightTitle">💬 Select a conversation</div>
           <div class="sub" id="rightSub">Open or create a new chat to begin</div>
-          <div id="groupMeta"><span id="groupMemberCount">0 members</span></div>
+          <div id="groupMeta" style="display: none;"><span id="groupMemberCount">0 members</span></div>
         </div>
       </div>
 
@@ -208,11 +207,13 @@
       <div id="replyDiv" class="reply-div"></div>
       <div id="filePreview" class="file-preview" style="display:none;"></div>
       <div class="input-row">
-        <textarea id="messageInput" placeholder="💬 Type your message — Enter to send, Shift+Enter for newline"></textarea>
-        <button id="emojiBtn" class="icon-btn" title="Add Emoji" style="background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.3); color: #fbbf24;"><i class="fas fa-smile"></i></button>
-        <button id="fileBtn" class="icon-btn" title="Attach File" style="background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); color: #3b82f6;"><i class="fas fa-paperclip"></i></button>
+        <button id="emojiBtn" class="icon-btn left" title="Add Emoji"><i class="fas fa-smile"></i></button>
+        <button id="fileBtn" class="icon-btn left" title="Attach File"><i class="fas fa-paperclip"></i></button>
         <input type="file" id="fileInput" style="display:none;" multiple>
-        <button id="sendDirect" class="btn btn-primary btn-send"><i class="fas fa-paper-plane"></i> Send</button>
+        <textarea id="messageInput" placeholder="Type a message" rows="1"></textarea>
+        <button id="sendDirect" class="btn btn-primary btn-send" title="Send or record">
+          <i id="sendIcon" class="fas fa-microphone"></i>
+        </button>
       </div>
     </div>
   </section>
@@ -288,6 +289,20 @@
     <div class="modal-actions">
       <button id="modalCancel" class="btn btn-light">Cancel</button>
       <button id="modalConfirm" class="btn btn-primary">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Selected Members Side Modal -->
+<div id="selectedMembersModal" style="display:none; position:fixed; right:0; top:0; height:100%; width:340px; z-index:1200;">
+  <div id="selectedMembersBackdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.35);"></div>
+  <div style="position:relative; height:100%; width:340px; background:#fff; box-shadow:-6px 0 18px rgba(0,0,0,0.12); padding:16px; overflow:auto;">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h5 style="margin:0; font-size:1.05em;">Selected Members</h5>
+      <button id="closeSelectedModal" class="btn btn-light" style="padding:6px 10px;">Close</button>
+    </div>
+    <div id="selectedMembersContainer" style="margin-top:12px;">
+      <!-- populated by JS -->
     </div>
   </div>
 </div>
@@ -601,6 +616,72 @@
     }
   });
 
+  // Close bottom sheet when clicking outside (robust fallback)
+  document.addEventListener('click', (e) => {
+    const bottomSheet = document.getElementById('bottomSheet');
+    const fab = document.getElementById('fabBtn');
+    if (!bottomSheet || !bottomSheet.classList.contains('show')) return;
+    // If click target is inside bottomSheet or is the FAB, ignore
+    if (e.target.closest && (e.target.closest('#bottomSheet') || e.target.closest('#fabBtn'))) return;
+    // Otherwise close
+    bottomSheet.classList.remove('show');
+    document.body.style.overflow = 'auto';
+  }, { capture: true });
+
+  // Drag-to-close (touch) for bottom sheet
+  (function(){
+    const bottomSheet = document.getElementById('bottomSheet');
+    if (!bottomSheet) return;
+    const handle = bottomSheet.querySelector('.bottom-sheet-handle');
+    let startY = 0;
+    let currentY = 0;
+    let dragging = false;
+
+    const onStart = (y) => {
+      startY = y;
+      currentY = y;
+      dragging = true;
+      bottomSheet.style.transition = 'none';
+    };
+
+    const onMove = (y) => {
+      if (!dragging) return;
+      currentY = y;
+      const delta = Math.max(0, currentY - startY);
+      // translate the sheet down
+      bottomSheet.style.transform = `translateY(${delta}px)`;
+      // fade backdrop slightly
+      const opacity = Math.max(0, 1 - (delta / 300));
+      bottomSheet.style.background = `rgba(0,0,0,${0.6 * opacity})`;
+    };
+
+    const onEnd = () => {
+      if (!dragging) return;
+      dragging = false;
+      const delta = Math.max(0, currentY - startY);
+      bottomSheet.style.transition = '';
+      bottomSheet.style.transform = '';
+      bottomSheet.style.background = '';
+      // threshold to close
+      if (delta > 120) {
+        bottomSheet.classList.remove('show');
+        document.body.style.overflow = 'auto';
+      }
+    };
+
+    // touch events
+    handle?.addEventListener('touchstart', (ev) => onStart(ev.touches[0].clientY));
+    handle?.addEventListener('touchmove', (ev) => { ev.preventDefault(); onMove(ev.touches[0].clientY); }, { passive: false });
+    handle?.addEventListener('touchend', onEnd);
+
+    // also allow dragging from sheet body
+    bottomSheet.addEventListener('touchstart', (ev) => {
+      if (ev.target === bottomSheet || ev.target.closest('.bottom-sheet-handle')) onStart(ev.touches[0].clientY);
+    });
+    bottomSheet.addEventListener('touchmove', (ev) => { if (dragging) { ev.preventDefault(); onMove(ev.touches[0].clientY); } }, { passive: false });
+    bottomSheet.addEventListener('touchend', onEnd);
+  })();
+
   // Bottom sheet options
   document.getElementById('bottomNewDM')?.addEventListener('click', () => {
     document.getElementById('bottomSheet').classList.remove('show');
@@ -616,14 +697,30 @@
 
   // Mobile header back button
   const backBtn = document.getElementById('backToConversations');
-  if (backBtn && isMobileView()) {
-    backBtn.style.display = 'flex !important';
+  // Manage back button visibility and behavior on mobile
+  const updateBackBtn = () => {
+    if (!backBtn) return;
+    const rightPanel = document.querySelector('.right-panel');
+    const showingRight = rightPanel && rightPanel.classList.contains('active');
+    if (isMobileView() && showingRight) {
+      backBtn.style.display = 'flex';
+    } else {
+      backBtn.style.display = 'none';
+    }
+  };
+
+  if (backBtn) {
     backBtn.addEventListener('click', () => {
       const rightPanel = document.querySelector('.right-panel');
-      if (rightPanel) rightPanel.classList.remove('active');
       const leftPanel = document.querySelector('.left-panel');
+      if (rightPanel) rightPanel.classList.remove('active');
       if (leftPanel) leftPanel.style.display = 'flex';
+      updateBackBtn();
     });
+    // Ensure button visibility updates on resize and initial load
+    window.addEventListener('resize', updateBackBtn);
+    // call once to set initial state
+    updateBackBtn();
   }
 
   // Conversation item click - show on mobile
@@ -635,6 +732,8 @@
       if (rightPanel && leftPanel) {
         rightPanel.classList.add('active');
         leftPanel.style.display = 'none';
+        // show back button when conversation is opened
+        updateBackBtn();
       }
     }
   });

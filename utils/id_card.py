@@ -87,7 +87,7 @@ def generate_student_id_card_pdf(student):
             profile_pic_base64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
     # School logo
-    logo_path = os.path.join(current_app.root_path, 'static', 'DHI-LOGO.JPEG')
+    logo_path = os.path.join(current_app.root_path, 'static', 'DHI-LOGO.PNG')
     logo_base64 = None
     if os.path.exists(logo_path):
         logo_base64 = image_to_base64(logo_path)

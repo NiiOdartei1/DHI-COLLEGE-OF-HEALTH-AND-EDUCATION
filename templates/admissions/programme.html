@@ -188,11 +188,9 @@
               </div>
 
               <div class="col-md-5">
-                <label for="{{ form.first_stream.id }}" class="form-label fw-semibold">Study Format <span class="text-danger">*</span></label>
-                {{ form.first_stream(class="form-select", id=form.first_stream.id) }}
-                {% if form.first_stream.errors %}
-                  <div class="invalid-feedback d-block">{{ form.first_stream.errors[0] }}</div>
-                {% endif %}
+                <label class="form-label fw-semibold">Study Format <span class="text-danger">*</span></label>
+                <input type="hidden" name="{{ form.first_stream.name }}" id="{{ form.first_stream.id }}" value="{{ session.get('student_type', 'online')|capitalize }}">
+                <div class="form-control-plaintext">{{ (session.get('student_type','online')|capitalize) }}</div>
               </div>
 
               <!-- 2nd choice -->
@@ -207,11 +205,9 @@
               </div>
 
               <div class="col-md-5">
-                <label for="{{ form.second_stream.id }}" class="form-label fw-semibold">Study Format</label>
-                {{ form.second_stream(class="form-select", id=form.second_stream.id) }}
-                {% if form.second_stream.errors %}
-                  <div class="invalid-feedback d-block">{{ form.second_stream.errors[0] }}</div>
-                {% endif %}
+                <label class="form-label fw-semibold">Study Format</label>
+                <input type="hidden" name="{{ form.second_stream.name }}" id="{{ form.second_stream.id }}" value="{{ session.get('student_type', 'online')|capitalize }}">
+                <div class="form-control-plaintext">{{ (session.get('student_type','online')|capitalize) }}</div>
               </div>
 
               <!-- 3rd choice -->
@@ -224,11 +220,9 @@
               </div>
 
               <div class="col-md-5">
-                <label for="{{ form.third_stream.id }}" class="form-label fw-semibold">Study Format</label>
-                {{ form.third_stream(class="form-select", id=form.third_stream.id) }}
-                {% if form.third_stream.errors %}
-                  <div class="invalid-feedback d-block">{{ form.third_stream.errors[0] }}</div>
-                {% endif %}
+                <label class="form-label fw-semibold">Study Format</label>
+                <input type="hidden" name="{{ form.third_stream.name }}" id="{{ form.third_stream.id }}" value="{{ session.get('student_type', 'online')|capitalize }}">
+                <div class="form-control-plaintext">{{ (session.get('student_type','online')|capitalize) }}</div>
               </div>
 
               <!-- Sponsor details -->

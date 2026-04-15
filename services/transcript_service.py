@@ -61,6 +61,20 @@ class TranscriptService:
         # Check if results are released
         is_released = TranscriptService._is_semester_released(academic_year, semester)
         
+        # Compute cumulative GPA across all semesters for this student (if any)
+        try:
+            all_grades = GradingCalculationEngine.get_student_all_grades(student_id)
+            if all_grades:
+                cumulative_gpa = GradingCalculationEngine.calculate_gpa(all_grades)
+                cumulative_weighted_gpa = GradingCalculationEngine.calculate_weighted_gpa(all_grades)
+            else:
+                cumulative_gpa = None
+                cumulative_weighted_gpa = None
+        except Exception:
+            # Safe fallback: don't break if grading engine raises
+            cumulative_gpa = None
+            cumulative_weighted_gpa = None
+
         # Build course details with course names and assessment weights
         from models import CourseAssessmentScheme
         course_details = []
@@ -99,6 +113,9 @@ class TranscriptService:
             'semester_gpa': semester_gpa,
             'semester_weighted_gpa': semester_weighted_gpa,
             'total_credit_hours': total_credit_hours,
+            # Include cumulative GPA across all semesters for CGPA display
+            'cumulative_gpa': cumulative_gpa,
+            'cumulative_weighted_gpa': cumulative_weighted_gpa,
             'is_released': is_released,
             'generated_at': datetime.utcnow()
         }
@@ -139,7 +156,13 @@ class TranscriptService:
         
         # Build semester summaries
         semesters_summary = []
+        seen_semesters = set()  # Deduplicate by (academic_year, semester)
         for academic_year, semester in sorted_keys:
+            semester_key = (academic_year, semester)
+            if semester_key in seen_semesters:
+                continue  # Skip duplicate semesters
+            seen_semesters.add(semester_key)
+            
             grades = grouped[(academic_year, semester)]
             semester_gpa = GradingCalculationEngine.calculate_gpa(grades)
             semester_weighted_gpa = GradingCalculationEngine.calculate_weighted_gpa(grades)
@@ -250,6 +273,24 @@ class TranscriptService:
         ).first()
         
         return bool(release)
+    
+    @staticmethod
+    def _format_academic_year(academic_year):
+        """
+        Format academic year from '2025/2026' to '2026' (extract the end year).
+        
+        Args:
+            academic_year (str): e.g., '2025/2026' or '2026'
+            
+        Returns:
+            str: Formatted year, e.g., '2026'
+        """
+        if not academic_year:
+            return academic_year
+        # If it contains a slash, extract the second year
+        if '/' in academic_year:
+            return academic_year.split('/')[-1].strip()
+        return academic_year
     
     @staticmethod
     def get_current_semester_transcript(student_id):
@@ -392,4 +433,576 @@ class TranscriptService:
         lines.append("=" * 80)
         
         return "\n".join(lines)
+    
+    @staticmethod
+    def generate_semester_transcript_html(transcript_data):
+        """
+        Generate HTML representation of semester transcript for PDF export.
+        Modern, simple design with school logo and signature section.
+        
+        Args:
+            transcript_data (dict): Output from generate_semester_transcript()
+            
+        Returns:
+            str: HTML string ready for WeasyPrint conversion
+        """
+        if not transcript_data:
+            return "<p>No transcript data available.</p>"
+        
+        # Build course rows - simplified without assessment breakdown
+        course_rows = ""
+        for course in transcript_data['courses']:
+            course_rows += f"""
+            <tr>
+                <td>{course['course_code']}</td>
+                <td>{course['course_name']}</td>
+                <td class="text-center">{course['credit_hours']}</td>
+                <td class="text-center"><strong>{course['final_score']:.2f}</strong></td>
+                <td class="text-center"><strong>{course['grade_letter']}</strong></td>
+            </tr>
+            """
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Semester Transcript</title>
+            <style>
+                .header-left {{
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 16px;
+                }}
+                .logo img {{
+                    height: 60px;
+                    width: auto;
+                }}
+                .school-details {{
+                    font-size: 11px;
+                    color: #1a1a1a;
+                    line-height: 1.3;
+                    font-weight: 500;
+                    margin: 0;
+                }}
+                .school-details p {{
+                    margin: 2px 0;
+                    white-space: nowrap;
+                }}
+                .container {{
+                    max-width: 900px;
+                    margin: 0 auto;
+                    background: white;
+                }}
+                .header {{
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    margin-bottom: 20px;
+                    padding-bottom: 10px;
+                    border-bottom: 2px solid #2c3e50;
+                }}
+                .logo {{
+                    font-size: 28px;
+                    font-weight: bold;
+                    color: #2c3e50;
+                }}
+                .title {{
+                    text-align: right;
+                }}
+                .title h1 {{
+                    font-size: 20px;
+                    color: #2c3e50;
+                    margin-bottom: 5px;
+                }}
+                .title p {{
+                    font-size: 13px;
+                    color: #7f8c8d;
+                }}
+                .student-section {{
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 16px;
+                    margin-bottom: 16px;
+                    padding: 12px;
+                    background: #f8f9fa;
+                    border-radius: 8px;
+                }}
+                .student-info p {{
+                    margin: 8px 0;
+                    font-size: 14px;
+                }}
+                .student-info strong {{
+                    color: #2c3e50;
+                    width: 120px;
+                    display: inline-block;
+                }}
+                .summary {{
+                    display: grid;
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 12px;
+                    margin: 16px 0;
+                }}
+                .summary-card {{
+                    padding: 8px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    border-radius: 6px;
+                    text-align: center;
+                    box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+                }}
+                .summary-card .label {{
+                    font-size: 10px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    opacity: 0.95;
+                    margin-bottom: 6px;
+                }}
+                .summary-card .value {{
+                    font-size: 20px;
+                    font-weight: 700;
+                }}
+                .courses-section {{
+                    margin: 20px 0;
+                }}
+                .courses-section h2 {{
+                    font-size: 16px;
+                    color: #2c3e50;
+                    margin-bottom: 15px;
+                    padding-bottom: 10px;
+                    border-bottom: 2px solid #667eea;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 10px;
+                }}
+                th {{
+                    background: #2c3e50;
+                    color: white;
+                    padding: 8px;
+                    text-align: left;
+                    font-size: 13px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                }}
+                td {{
+                    padding: 8px;
+                    border-bottom: 1px solid #ecf0f1;
+                    font-size: 13px;
+                }}
+                tbody tr:nth-child(odd) {{
+                    background: #f8f9fa;
+                }}
+                tbody tr:hover {{
+                    background: #e8eef7;
+                }}
+                .text-center {{
+                    text-align: center;
+                }}
+                .signature-section {{
+                    margin-top: 30px;
+                    padding-top: 20px;
+                    border-top: 2px solid #ecf0f1;
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 30px;
+                }}
+                .signature-box {{
+                    text-align: center;
+                }}
+                .signature-line {{
+                    border-top: 2px solid #2c3e50;
+                    margin-bottom: 8px;
+                    height: 40px;
+                }}
+                .signature-box p {{
+                    font-size: 12px;
+                    color: #7f8c8d;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                }}
+                .footer {{
+                    margin-top: 50px;
+                    padding-top: 20px;
+                    border-top: 1px solid #ecf0f1;
+                    text-align: center;
+                    font-size: 11px;
+                    color: #95a5a6;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="header-left">
+                        <div class="logo"><img src="file:///c:/Users/lampt/Desktop/LMS/LMS/static/DHI-LOGO.png" alt="School Logo"></div>
+                        <div class="school-details">
+                            <p><strong>DHI COLLEGE OF HEALTH AND EDUCATION</strong></p>
+                            <p>ACADEMIC AFFAIRS OFFICE</p>
+                            <p>P.O.Box 12959, Kumasi - Ghana. Contact 0307020844</p>
+                            <p>Email: info@dhi.edu.gh</p>
+                        </div>
+                    </div>
+                    <div class="title">
+                        <h1>Semester Report</h1>
+                    </div>
+                </div>
+                
+                <div class="student-section">
+                    <div class="student-info">
+                        <p><strong>Student Name:</strong> {transcript_data['student_name']}</p>
+                        <p><strong>Student ID:</strong> {transcript_data['student_id']}</p>
+                    </div>
+                    <div class="student-info">
+                        <p><strong>Academic Year:</strong> {TranscriptService._format_academic_year(transcript_data['academic_year'])}</p>
+                        <p><strong>Semester:</strong> {transcript_data['semester']}</p>
+                    </div>
+                </div>
+                
+                <div class="summary">
+                    <div class="summary-card">
+                        <div class="label">GPA</div>
+                        <div class="value">{transcript_data['semester_gpa']:.2f}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">Weighted GPA</div>
+                        <div class="value">{transcript_data['semester_weighted_gpa']:.2f}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">Credit Hours</div>
+                        <div class="value">{transcript_data['total_credit_hours']}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">CGPA</div>
+                        <div class="value">{(f"{transcript_data.get('cumulative_gpa'):.2f}" if transcript_data.get('cumulative_gpa') is not None else '-')}</div>
+                    </div>
+                </div>
+                
+                <div class="courses-section">
+                    <h2>Courses</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Course Code</th>
+                                <th>Course Name</th>
+                                <th class="text-center">Credits</th>
+                                <th class="text-center">Score</th>
+                                <th class="text-center">Grade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {course_rows}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="signature-section">
+                    <div class="signature-box">
+                        <div class="signature-line"></div>
+                        <p>Registrar Signature</p>
+                    </div>
+                    <div class="signature-box">
+                        <div class="signature-line"></div>
+                        <p>Date</p>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p>This is an official academic transcript issued by the Institution.</p>
+                    <p>Generated: {transcript_data['generated_at'].strftime('%B %d, %Y')}</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html
+    
+    @staticmethod
+    def generate_full_transcript_html(transcript_data):
+        """
+        Generate HTML representation of full transcript for PDF export.
+        Modern, simple design with school logo and signature section.
+        
+        Args:
+            transcript_data (dict): Output from generate_full_transcript()
+            
+        Returns:
+            str: HTML string ready for WeasyPrint conversion
+        """
+        if not transcript_data:
+            return "<p>No transcript data available.</p>"
+        
+        # Build semester summary table
+        semester_rows = ""
+        for summary in transcript_data['semesters_summary']:
+            semester_rows += f"""
+            <tr>
+                <td>{TranscriptService._format_academic_year(summary['academic_year'])}</td>
+                <td>{summary['semester']}</td>
+                <td class="text-center">{summary['courses_count']}</td>
+                <td class="text-center"><strong>{summary['gpa']:.2f}</strong></td>
+                <td class="text-center"><strong>{summary['weighted_gpa']:.2f}</strong></td>
+                <td class="text-center">{summary['credit_hours']}</td>
+            </tr>
+            """
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Full Academic Transcript</title>
+            <style>
+                * {{
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }}
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    color: #2c3e50;
+                    line-height: 1.6;
+                    background: white;
+                    padding: 30px;
+                }}
+                .header-left {{
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 16px;
+                }}
+                .logo img {{
+                    height: 60px;
+                    width: auto;
+                }}
+                .school-details {{
+                    font-size: 11px;
+                    color: #1a1a1a;
+                    line-height: 1.3;
+                    font-weight: 500;
+                    margin: 0;
+                }}
+                .school-details p {{
+                    margin: 2px 0;
+                    white-space: nowrap;
+                }}
+                .container {{
+                    max-width: 900px;
+                    margin: 0 auto;
+                    background: white;
+                }}
+                .header {{
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 20px;
+                    padding-bottom: 10px;
+                    border-bottom: 2px solid #2c3e50;
+                }}
+                .logo {{
+                    font-size: 28px;
+                    font-weight: bold;
+                    color: #2c3e50;
+                }}
+                .title {{
+                    text-align: right;
+                }}
+                .title h1 {{
+                    font-size: 20px;
+                    color: #2c3e50;
+                    margin-bottom: 5px;
+                }}
+                .title p {{
+                    font-size: 13px;
+                    color: #7f8c8d;
+                }}
+                .student-section {{
+                    margin-bottom: 16px;
+                    padding: 12px;
+                    background: #f8f9fa;
+                    border-radius: 8px;
+                }}
+                .student-section p {{
+                    margin: 8px 0;
+                    font-size: 14px;
+                }}
+                .student-section strong {{
+                    color: #2c3e50;
+                    width: 120px;
+                    display: inline-block;
+                }}
+                .summary {{
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 12px;
+                    margin: 16px 0;
+                }}
+                .summary-card {{
+                    padding: 12px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    border-radius: 8px;
+                    text-align: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                }}
+                .summary-card .label {{
+                    font-size: 12px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    opacity: 0.9;
+                    margin-bottom: 8px;
+                }}
+                .summary-card .value {{
+                    font-size: 24px;
+                    font-weight: bold;
+                }}
+                .semesters-section {{
+                    margin: 20px 0;
+                }}
+                .semesters-section h2 {{
+                    font-size: 16px;
+                    color: #2c3e50;
+                    margin-bottom: 15px;
+                    padding-bottom: 10px;
+                    border-bottom: 2px solid #667eea;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 10px;
+                }}
+                th {{
+                    background: #2c3e50;
+                    color: white;
+                    padding: 8px;
+                    text-align: left;
+                    font-size: 13px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                }}
+                td {{
+                    padding: 8px;
+                    border-bottom: 1px solid #ecf0f1;
+                    font-size: 13px;
+                }}
+                tbody tr:nth-child(odd) {{
+                    background: #f8f9fa;
+                }}
+                tbody tr:hover {{
+                    background: #e8eef7;
+                }}
+                .text-center {{
+                    text-align: center;
+                }}
+                .signature-section {{
+                    margin-top: 30px;
+                    padding-top: 20px;
+                    border-top: 2px solid #ecf0f1;
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 30px;
+                }}
+                .signature-box {{
+                    text-align: center;
+                }}
+                .signature-line {{
+                    border-top: 2px solid #2c3e50;
+                    margin-bottom: 8px;
+                    height: 40px;
+                }}
+                .signature-box p {{
+                    font-size: 12px;
+                    color: #7f8c8d;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                }}
+                .footer {{
+                    margin-top: 50px;
+                    padding-top: 20px;
+                    border-top: 1px solid #ecf0f1;
+                    text-align: center;
+                    font-size: 11px;
+                    color: #95a5a6;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="header-left">
+                        <div class="logo"><img src="file:///c:/Users/lampt/Desktop/LMS/LMS/static/DHI-LOGO.png" alt="School Logo"></div>
+                        <div class="school-details">
+                            <p><strong>DHI COLLEGE OF HEALTH AND EDUCATION</strong></p>
+                            <p>ACADEMIC AFFAIRS OFFICE</p>
+                            <p>P.O.Box 12959, Kumasi - Ghana. Contact 0307020844</p>
+                            <p>Email: info@dhi.edu.gh</p>
+                        </div>
+                    </div>
+                    <div class="title">
+                        <h1>ACADEMIC TRANSCRIPT</h1>
+                        <p>Complete Academic History</p>
+                    </div>
+                </div>
+                
+                <div class="student-section">
+                    <p><strong>Student Name:</strong> {transcript_data['student_name']}</p>
+                    <p><strong>Student ID:</strong> {transcript_data['student_id']}</p>
+                </div>
+                
+                <div class="summary">
+                    <div class="summary-card">
+                        <div class="label">Cumulative GPA</div>
+                        <div class="value">{transcript_data['cumulative_gpa']:.2f}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">Weighted GPA</div>
+                        <div class="value">{transcript_data['cumulative_weighted_gpa']:.2f}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">Total Credits</div>
+                        <div class="value">{transcript_data['total_credit_hours_attempted']}</div>
+                    </div>
+                </div>
+                
+                <div class="semesters-section">
+                    <h2>Academic History</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Academic Year</th>
+                                <th>Semester</th>
+                                <th class="text-center">Courses</th>
+                                <th class="text-center">GPA</th>
+                                <th class="text-center">Weighted GPA</th>
+                                <th class="text-center">Credit Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {semester_rows}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="signature-section">
+                    <div class="signature-box">
+                        <div class="signature-line"></div>
+                        <p>Registrar / Director</p>
+                    </div>
+                    <div class="signature-box">
+                        <div class="signature-line"></div>
+                        <p>Date</p>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p>This is an official academic transcript issued by the Institution.</p>
+                    <p>Generated: {transcript_data['generated_at'].strftime('%B %d, %Y')}</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html
     

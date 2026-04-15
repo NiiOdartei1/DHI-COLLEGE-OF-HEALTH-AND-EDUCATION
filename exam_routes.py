@@ -5,6 +5,7 @@ from models import db, User, Quiz, StudentQuizSubmission, Question, StudentProfi
 from datetime import date, datetime, timedelta, time
 from sqlalchemy.orm import joinedload
 from forms import ExamLoginForm
+from utils.permission_decorators import online_student_required
 import logging
 
 # Logger FIRST
@@ -22,6 +23,7 @@ exam_bp = Blueprint('exam', __name__, url_prefix='/exam')
 
 # Now your routes
 @exam_bp.route('/welcome')
+@online_student_required()
 def welcome():
     flash('Welcome! Please login to view your exams.', 'info')
     return render_template('exam/welcome.html')
@@ -91,6 +93,7 @@ def exam_login():
 
 @exam_bp.route('/dashboard')
 @login_required
+@online_student_required()
 def exam_dashboard():
     if current_user.role != 'student':
         flash("Only students can access exams.", "danger")
@@ -124,6 +127,7 @@ def exam_dashboard():
 # --- EXAMS ---
 @exam_bp.route('/exams')
 @login_required
+@online_student_required()
 def exams():
     exams = Exam.query.all()
     now = datetime.utcnow()  # or datetime.now() depending on your timezone handling
@@ -141,6 +145,7 @@ def exams():
 
 @exam_bp.route('/take-exam/<int:exam_id>/<int:attempt_id>')
 @login_required
+@online_student_required()
 def take_exam(exam_id, attempt_id):
     if current_user.role != 'student':
         abort(403)
@@ -207,6 +212,7 @@ def take_exam(exam_id, attempt_id):
 
 @exam_bp.route('/exams/<int:exam_id>/password', methods=['GET','POST'])
 @login_required
+@online_student_required()
 def exam_password(exam_id):
     if current_user.role != 'student':
         abort(403)
@@ -244,6 +250,7 @@ def exam_password(exam_id):
 
 @exam_bp.route('/exams/<int:exam_id>/instructions', methods=['GET', 'POST'])
 @login_required
+@online_student_required()
 def exam_instructions(exam_id):
     if current_user.role != 'student':
         abort(403)
@@ -339,6 +346,7 @@ def pick_set_for_student(exam, student_user):
 
 @exam_bp.route('/exams/<int:exam_id>/select-set', methods=['GET','POST'])
 @login_required
+@online_student_required()
 def select_exam_set(exam_id):
     if current_user.role != 'student':
         abort(403)
@@ -377,6 +385,7 @@ def select_exam_set(exam_id):
 
 @exam_bp.route('/start-exam-timer/<int:exam_id>', methods=['POST'])
 @login_required
+@online_student_required()
 def start_exam_timer(exam_id):
     key = f'exam_{exam_id}_start_time'
     if key not in session:
@@ -386,6 +395,7 @@ def start_exam_timer(exam_id):
 
 @exam_bp.route('/autosave_exam_answer', methods=['POST'])
 @login_required
+@online_student_required()
 def autosave_exam_answer():
     data = request.get_json()
     exam_id = data.get('exam_id')
@@ -406,6 +416,7 @@ def autosave_exam_answer():
 
 @exam_bp.route('/submit_exam/<int:exam_id>', methods=['POST'])
 @login_required
+@online_student_required()
 def submit_exam(exam_id):
     exam = Exam.query.get_or_404(exam_id)
 
@@ -460,6 +471,7 @@ def submit_exam(exam_id):
 
 @exam_bp.route('/has-submitted-exam/<int:exam_id>')
 @login_required
+@online_student_required()
 def has_submitted_exam(exam_id):
     exists = ExamSubmission.query.filter_by(
         student_id=current_user.id,
@@ -469,6 +481,7 @@ def has_submitted_exam(exam_id):
 
 @exam_bp.route('/exam_result/<int:submission_id>')
 @login_required
+@online_student_required()
 def exam_result(submission_id):
     submission = ExamSubmission.query.get_or_404(submission_id)
 

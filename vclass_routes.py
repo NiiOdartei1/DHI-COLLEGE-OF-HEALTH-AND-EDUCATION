@@ -7,6 +7,7 @@ from werkzeug.utils import safe_join, secure_filename
 from models import QuizAttempt, db, User, Quiz, StudentQuizSubmission, Question, StudentProfile, Assignment, CourseMaterial, StudentCourseRegistration, Course,  TimetableEntry, AcademicCalendar, AcademicYear, AppointmentSlot, AppointmentBooking, StudentFeeBalance, ProgrammeFeeStructure, StudentFeeTransaction, Exam, ExamSubmission, ExamQuestion, ExamAttempt, ExamSet, ExamSetQuestion, Meeting, StudentAnswer, Recording, PasswordResetRequest, PasswordResetToken, AssignmentSubmission
 from datetime import date, datetime, timedelta, time
 from forms import StudentLoginForm, ForgotPasswordForm, ResetPasswordForm
+from utils.permission_decorators import online_student_required
 from io import BytesIO
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
@@ -159,6 +160,7 @@ def switch_to_student_courses():
 # Virtual Classroom Dashboard
 @vclass_bp.route('/dashboard')
 @login_required
+@online_student_required()
 def dashboard():
     """Virtual classroom dashboard for tertiary students"""
     if current_user.role != 'student':
@@ -356,6 +358,7 @@ def is_quiz_submission_allowed(quiz):
 # Quiz instructions (single-shot)
 @vclass_bp.route('/quiz-instructions/<int:quiz_id>')
 @login_required
+@online_student_required()
 def quiz_instructions(quiz_id):
     quiz = Quiz.query.get_or_404(quiz_id)
     now = datetime.utcnow()
@@ -388,6 +391,7 @@ def quiz_instructions(quiz_id):
 # Take quiz (single-shot)
 @vclass_bp.route('/take-quiz/<int:quiz_id>')
 @login_required
+@online_student_required()
 def take_quiz(quiz_id):
     if current_user.role != 'student':
         abort(403)
@@ -486,6 +490,7 @@ def take_quiz(quiz_id):
 # Start quiz timer (AJAX) — sets session start time for a quiz
 @vclass_bp.route('/start_quiz_timer/<int:quiz_id>', methods=['POST'])
 @login_required
+@online_student_required()
 def start_quiz_timer(quiz_id):
     # Only students should start quiz timers
     if getattr(current_user, 'role', None) != 'student':
@@ -507,6 +512,7 @@ def start_quiz_timer(quiz_id):
 # Autosave answer endpoint (single-shot)
 @vclass_bp.route('/autosave_answer', methods=['POST'])
 @login_required
+@online_student_required()
 def autosave_answer():
     """
     JSON: { quiz_id, question_id, selected_option_id?, answer_text? }
@@ -566,6 +572,7 @@ def autosave_answer():
 # Get saved answers (for restore). Returns empty if already submitted.
 @vclass_bp.route('/get_saved_answers/<int:quiz_id>')
 @login_required
+@online_student_required()
 def get_saved_answers(quiz_id):
     # If already submitted -> empty (no restore)
     if StudentQuizSubmission.query.filter_by(quiz_id=quiz_id, student_id=current_user.id).first():
@@ -592,6 +599,7 @@ def get_saved_answers(quiz_id):
 # Submit quiz (single-shot grading + submission record)
 @vclass_bp.route('/submit_quiz/<int:quiz_id>', methods=['POST'])
 @login_required
+@online_student_required()
 def submit_quiz(quiz_id):
     if current_user.role != 'student':
         abort(403)
@@ -734,6 +742,7 @@ def submit_quiz(quiz_id):
 
 @vclass_bp.route('/has-submitted/<int:quiz_id>')
 @login_required
+@online_student_required()
 def has_submitted(quiz_id):
     exists = StudentQuizSubmission.query.filter_by(
         student_id=current_user.id,
@@ -743,6 +752,7 @@ def has_submitted(quiz_id):
 
 @vclass_bp.route('/quiz_result/<int:submission_id>')
 @login_required
+@online_student_required()
 def quiz_result(submission_id):
     submission = StudentQuizSubmission.query.get_or_404(submission_id)
     quiz = submission.quiz
@@ -831,6 +841,7 @@ def grade_quiz_attempt(attempt_id):
 
 @vclass_bp.route('/download/assignments/<filename>')
 @login_required
+@online_student_required()
 def download_assignment(filename):
     filepath = safe_join(current_app.config['UPLOAD_FOLDER'], filename)
     print(f"Looking for file: {filepath}")  # 🔍 DEBUG LINE
@@ -840,6 +851,7 @@ def download_assignment(filename):
 
 @vclass_bp.route('/assignment/<int:assignment_id>/submit', methods=['GET', 'POST'])
 @login_required
+@online_student_required()
 def submit_assignment(assignment_id):
     assignment = Assignment.query.get_or_404(assignment_id)
 
@@ -878,6 +890,7 @@ def submit_assignment(assignment_id):
 # ----------------------------------------------------------------
 @vclass_bp.route('/materials')
 @login_required
+@online_student_required()
 def materials_overview():
     """
     Show a card for each course that has materials (or 'General').
@@ -920,6 +933,7 @@ def materials_overview():
 # ----------------------------------------------------------------
 @vclass_bp.route('/materials/course/<path:course_name>')
 @login_required
+@online_student_required()
 def materials_by_course(course_name):
     """
     Show all materials for a course (course_name comes URL-encoded).
@@ -954,6 +968,7 @@ def materials_by_course(course_name):
 # ----------------------------------------------------------------
 @vclass_bp.route('/preview/materials/<path:filename>')
 @login_required
+@online_student_required()
 def preview_material(filename):
     materials_dir = current_app.config.get("MATERIALS_FOLDER") or os.path.join(os.getcwd(), "uploads", "materials")
     filepath = os.path.join(materials_dir, filename)
@@ -969,6 +984,7 @@ def preview_material(filename):
 
 @vclass_bp.route('/download/materials/<path:filename>')
 @login_required
+@online_student_required()
 def download_material(filename):
     materials_dir = current_app.config.get("MATERIALS_FOLDER") or os.path.join(os.getcwd(), "uploads", "materials")
     filepath = os.path.join(materials_dir, filename)
@@ -978,6 +994,7 @@ def download_material(filename):
 
 @vclass_bp.route('/assignments')
 @login_required
+@online_student_required()
 def assignments():
     assignments = Assignment.query.all()
 
@@ -996,6 +1013,7 @@ def assignments():
 
 @vclass_bp.route('/material/video/<filename>')
 @login_required
+@online_student_required()
 def play_video(filename):
     material = CourseMaterial.query.filter_by(filename=filename).first_or_404()
 
@@ -1013,6 +1031,7 @@ def play_video(filename):
 
 @vclass_bp.route('/stream/materials/<filename>')
 @login_required
+@online_student_required()
 def stream_material_video(filename):
     video_path = os.path.join(current_app.root_path, 'uploads', 'materials', filename)
     if not os.path.isfile(video_path):
@@ -1042,6 +1061,7 @@ def profile():
 
 @vclass_bp.route('/student/meetings')
 @login_required
+@online_student_required()
 def student_meetings():
     # 🔐 Role check
     if current_user.role != 'student':

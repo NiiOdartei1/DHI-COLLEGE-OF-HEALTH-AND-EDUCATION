@@ -64,6 +64,30 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- Cumulative Statistics -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card text-center"><div class="card-body"><h5 class="card-title">Cumulative GPA</h5><p class="display-5">{{ "%.2f"|format(transcript.cumulative_gpa) }}</p></div></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center"><div class="card-body"><h5 class="card-title">Weighted GPA</h5><p class="display-5">{{ "%.2f"|format(transcript.cumulative_weighted_gpa) }}</p></div></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center"><div class="card-body"><h5 class="card-title">Total Credits</h5><p class="display-5">{{ transcript.total_credit_hours_attempted }}</p></div></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Download Options for Full Transcript -->
+                    <div class="card">
+                        <div class="card-header bg-success text-white"><h5 class="mb-0">Download Full Transcript</h5></div>
+                        <div class="card-body">
+                            <a href="{{ url_for('student_transcript.download_full_pdf') }}" 
+                               class="btn btn-primary">
+                                <i class="fas fa-file-pdf"></i> Download as PDF
+                            </a>
+                        </div>
+                    </div>
 
                 {% else %}
                     <!-- Semester view: header + courses table -->
@@ -126,6 +150,17 @@
                                     {% endfor %}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Download Options -->
+                    <div class="card">
+                        <div class="card-header bg-success text-white"><h5 class="mb-0">Download Transcript</h5></div>
+                        <div class="card-body">
+                            <a href="{{ url_for('student_transcript.download_semester_pdf', academic_year=transcript.academic_year, semester=transcript.semester) }}" 
+                               class="btn btn-primary">
+                                <i class="fas fa-file-pdf"></i> Download as PDF
+                            </a>
                         </div>
                     </div>
                 {% endif %}

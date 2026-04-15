@@ -406,6 +406,58 @@ def register_permission_filters(app):
 
 
 # ============================================================
+# STUDENT TYPE DECORATORS
+# ============================================================
+
+def online_student_required():
+    """
+    Require student to be an online student to access LMS features
+    Online students have access to quizzes, assignments, exams, materials, and chat
+    Regular students only have access to the admissions portal
+    
+    Usage:
+        @login_required
+        @online_student_required()
+        def take_quiz():
+            pass
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Check user is authenticated
+            if not current_user.is_authenticated:
+                abort(401)
+            
+            # Only students have student_type
+            if current_user.role != 'student':
+                logger.warning(f"Non-student attempted to access LMS feature: {current_user.user_id}")
+                abort(403)
+            
+            # Get student profile
+            from models import StudentProfile
+            student = StudentProfile.query.filter_by(user_id=current_user.user_id).first()
+            
+            if not student:
+                logger.error(f"StudentProfile not found for user: {current_user.user_id}")
+                abort(403)
+            
+            # Check if online student
+            if not student.is_online_student:
+                logger.warning(f"Regular student attempted to access LMS feature: {current_user.user_id}")
+                # Render custom 403 page for regular students instead of plain abort
+                from flask import render_template, make_response
+                response = make_response(
+                    render_template('errors/403_online_students_only.html'),
+                    403
+                )
+                return response
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+# ============================================================
 # USAGE EXAMPLES IN ROUTES
 # ============================================================
 

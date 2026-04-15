@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
 from flask_socketio import emit, join_room
 from utils.extensions import db, socketio
+from utils.permission_decorators import online_student_required
 from models import Conversation, ConversationParticipant, Message, MessageReaction, User, Admin, StudentProfile, TeacherProfile
 from datetime import datetime
 import json
@@ -218,6 +219,7 @@ def handle_message(data):
 # ─────────────────────────
 @chat_bp.route('/')
 @login_required
+@online_student_required()
 def chat_home():
     """Chat home page (teachers and students only)."""
     if not is_user_or_admin():
@@ -227,6 +229,7 @@ def chat_home():
 
 @chat_bp.route('/conversations', methods=['GET'])
 @login_required
+@online_student_required()
 def get_conversations():
     """Get all conversations for the current user."""
     if not is_user_or_admin():
@@ -239,8 +242,55 @@ def get_conversations():
     result = [conversation_to_dict(conv, current_user.public_id) for conv in conversations]
     return jsonify(result), 200
 
+
+@chat_bp.route('/programmes', methods=['GET'])
+@login_required
+@online_student_required()
+def get_programmes():
+    """Return available programme names and level choices for frontend selectors."""
+    from utils.helpers import get_programme_choices, get_level_choices
+    if not is_user_or_admin():
+        return jsonify({'error': 'Access denied'}), 403
+
+    programmes = [p for (p, _) in get_programme_choices()]
+    levels = [lv for (lv, label) in get_level_choices()]
+    return jsonify({'programmes': programmes, 'levels': levels}), 200
+
+
+@chat_bp.route('/students_by_programme', methods=['GET'])
+@login_required
+@online_student_required()
+def students_by_programme():
+    """Return users (students/teachers) filtered by programme and level."""
+    if not is_user_or_admin():
+        return jsonify({'error': 'Access denied'}), 403
+
+    programme = request.args.get('programme')
+    level = request.args.get('level')
+    if not programme or not level:
+        return jsonify({'error': 'Missing parameters'}), 400
+
+    try:
+        lvl_int = int(level)
+    except:
+        return jsonify({'error': 'Invalid level'}), 400
+
+    # Join User -> StudentProfile to get users in programme+level
+    students = []
+    from models import User, StudentProfile
+    users = User.query.join(StudentProfile, User.user_id == StudentProfile.user_id) \
+        .filter(StudentProfile.current_programme == programme, StudentProfile.programme_level == lvl_int) \
+        .order_by(User.first_name, User.last_name) \
+        .all()
+
+    for u in users:
+        students.append({'public_id': getattr(u, 'public_id', None), 'name': getattr(u, 'full_name', getattr(u, 'username', 'Unknown'))})
+
+    return jsonify({'students': students}), 200
+
 @chat_bp.route('/conversations/<int:conv_id>/messages', methods=['GET'])
 @login_required
+@online_student_required()
 def get_messages(conv_id):
     """Get messages from a conversation (participant access only)."""
     if not is_user_or_admin():
@@ -266,6 +316,7 @@ def get_messages(conv_id):
 
 @chat_bp.route('/presence/<public_id>')
 @login_required
+@online_student_required()
 def get_presence(public_id):
     """Get presence status of a user."""
     if not is_user_or_admin():
@@ -292,6 +343,7 @@ def get_presence(public_id):
 
 @chat_bp.route('/send_dm', methods=['POST'])
 @login_required
+@online_student_required()
 def send_dm():
     """Send a direct message to another user or admin."""
     if not is_user_or_admin():
@@ -358,6 +410,7 @@ def send_dm():
 
 @chat_bp.route('/mark_read', methods=['POST'])
 @login_required
+@online_student_required()
 def mark_read():
     """Mark conversation as read."""
     if not is_user_or_admin():
@@ -374,20 +427,13 @@ def mark_read():
         db.session.commit()
     return jsonify({"success": True}), 200
 
-@chat_bp.route('/programmes')
-@login_required
-def get_programmes():
-    """Get all programmes (used for filtering students in chat)."""
-    if not is_user_or_admin():
-        return jsonify({"error": "Access denied"}), 403
-    
-    # Get unique programmes from StudentProfile
-    programmes = db.session.query(StudentProfile.current_programme).distinct().all()
-    result = [{"name": p[0]} for p in programmes if p[0]]
-    return jsonify(result), 200
+# NOTE: Programmes are provided by the `/programmes` route defined earlier
+# which returns programmes and levels together. The older distinct-programme
+# endpoint was removed to avoid duplicate endpoint names.
 
 @chat_bp.route('/levels')
 @login_required
+@online_student_required()
 def get_levels():
     """Get all programme levels (used for filtering students in chat)."""
     if not is_user_or_admin():
@@ -400,6 +446,7 @@ def get_levels():
 
 @chat_bp.route('/users')
 @login_required
+@online_student_required()
 def get_users():
     """
     Get list of teachers, students, and admins filtered by programme and level.
@@ -476,6 +523,7 @@ def get_users():
 
 @chat_bp.route('/conversations/<int:conv_id>/messages/<int:msg_id>/edit', methods=['POST'])
 @login_required
+@online_student_required()
 def edit_message(conv_id, msg_id):
     """Edit your own message."""
     if not is_user_or_admin():
@@ -518,6 +566,7 @@ def edit_message(conv_id, msg_id):
 
 @chat_bp.route('/conversations/<int:conv_id>/messages/<int:msg_id>/delete', methods=['POST'])
 @login_required
+@online_student_required()
 def delete_message(conv_id, msg_id):
     """Delete your own message."""
     if not is_user_or_admin():
@@ -555,6 +604,7 @@ def delete_message(conv_id, msg_id):
 
 @chat_bp.route('/conversations/<int:conv_id>/messages/<int:msg_id>/copy', methods=['GET'])
 @login_required
+@online_student_required()
 def copy_message(conv_id, msg_id):
     """Copy message content."""
     if not is_user_or_admin():
@@ -578,6 +628,7 @@ def copy_message(conv_id, msg_id):
 
 @chat_bp.route('/conversations/<int:conv_id>/messages/<int:msg_id>/react', methods=['POST'])
 @login_required
+@online_student_required()
 def add_reaction(conv_id, msg_id):
     """Add emoji reaction to message."""
     if not is_user_or_admin():
@@ -625,6 +676,7 @@ def add_reaction(conv_id, msg_id):
 
 @chat_bp.route('/conversations/<int:conv_id>/messages/<int:msg_id>/react', methods=['DELETE'])
 @login_required
+@online_student_required()
 def remove_reaction(conv_id, msg_id):
     """Remove emoji reaction from message."""
     if not is_user_or_admin():
@@ -666,6 +718,7 @@ def remove_reaction(conv_id, msg_id):
     methods=['POST']
 )
 @login_required
+@online_student_required()
 def forward_message(conv_id, msg_id):
     """Forward a message to another conversation."""
     if not is_user_or_admin():
@@ -727,6 +780,7 @@ def forward_message(conv_id, msg_id):
 # Group chat routes
 @chat_bp.route('/conversations/group/create', methods=['POST'])
 @login_required
+@online_student_required()
 def create_group():
     """Create a new group conversation."""
     if not is_user_or_admin():
@@ -762,6 +816,7 @@ def create_group():
 
 @chat_bp.route('/groups/<int:conv_id>/rename', methods=['POST'])
 @login_required
+@online_student_required()
 def rename_group(conv_id):
     """Rename a group conversation."""
     if not is_user_or_admin():
@@ -787,6 +842,7 @@ def rename_group(conv_id):
 
 @chat_bp.route('/groups/<int:conv_id>/add_member', methods=['POST'])
 @login_required
+@online_student_required()
 def add_group_member(conv_id):
     """Add a member to a group conversation."""
     if not is_user_or_admin():
@@ -813,6 +869,7 @@ def add_group_member(conv_id):
 
 @chat_bp.route('/groups/<int:conv_id>/remove_member', methods=['POST'])
 @login_required
+@online_student_required()
 def remove_group_member(conv_id):
     """Remove a member from a group conversation."""
     if not is_user_or_admin():
@@ -835,6 +892,7 @@ def remove_group_member(conv_id):
 
 @chat_bp.route('/conversations/<int:conv_id>/messages', methods=['POST'])
 @login_required
+@online_student_required()
 def post_conversation_message(conv_id):
     """Post a message to a conversation."""
     if not is_user_or_admin():
@@ -892,6 +950,7 @@ def post_conversation_message(conv_id):
 
 @chat_bp.route('/conversations/<int:conv_id>/add_members', methods=['POST'])
 @login_required
+@online_student_required()
 def add_members_to_group(conv_id):
     """Add multiple members to a group conversation."""
     if not is_user_or_admin():

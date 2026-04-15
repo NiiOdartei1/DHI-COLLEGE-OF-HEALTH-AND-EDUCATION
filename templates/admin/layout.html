@@ -692,6 +692,11 @@
         <span class="link-text">Payments</span>
       </a>
 
+      <a href="{{ url_for('admin.manage_fee_payment_rules') }}" class="{% if request.endpoint == 'admin.manage_fee_payment_rules' %}active{% endif %}">
+        <i class="fas fa-sliders-h"></i>
+        <span class="link-text">Payment Rules</span>
+      </a>
+
       <a href="{{ url_for('admin.manage_promotions') }}" class="{% if request.endpoint == 'admin.manage_promotions' %}active{% endif %}">
         <i class="fas fa-graduation-cap"></i>
         <span class="link-text">Promotions</span>

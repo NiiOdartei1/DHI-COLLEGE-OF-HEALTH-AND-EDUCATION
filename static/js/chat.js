@@ -173,6 +173,28 @@ const ChatApp = {
       this.dom.messageInput.style.height = Math.min(this.dom.messageInput.scrollHeight, 160) + 'px';
     });
 
+    // Toggle send icon (microphone vs paper-plane) depending on message content
+    try {
+      const sendIcon = document.getElementById('sendIcon');
+      const updateSendIcon = () => {
+        const text = (this.dom.messageInput.value || '').trim();
+        if (text.length > 0) {
+          sendIcon.className = 'fas fa-paper-plane';
+          this.dom.sendBtn.classList.add('has-text');
+          this.dom.sendBtn.setAttribute('title', 'Send message');
+        } else {
+          sendIcon.className = 'fas fa-microphone';
+          this.dom.sendBtn.classList.remove('has-text');
+          this.dom.sendBtn.setAttribute('title', 'Record voice message');
+        }
+      };
+      // run once and on input
+      updateSendIcon();
+      this.dom.messageInput.addEventListener('input', updateSendIcon);
+    } catch (e) {
+      console.warn('Send icon toggle not initialized:', e);
+    }
+
     // Back button
     if (this.dom.backBtn) {
       this.dom.backBtn.addEventListener('click', () => this.closeConversation());
@@ -424,10 +446,21 @@ const ChatApp = {
 
     if (conv.type === 'group') {
       this.dom.rightTitle.textContent = '👥 ' + (conv.name || 'Group');
-      this.dom.rightSub.textContent = (conv.participants?.length || 0) + ' members';
+      // show group member metadata only for groups
+      const memberCount = conv.participants?.length || 0;
+      const meta = document.getElementById('groupMeta');
+      const metaCount = document.getElementById('groupMemberCount');
+      if (meta && metaCount) {
+        meta.style.display = 'block';
+        metaCount.textContent = `${memberCount} members`;
+      }
+      this.dom.rightSub.textContent = '';
       this.dom.rightAvatar.style.background = '#0ea5e9';
-      this.dom.rightAvatar.textContent = conv.participants?.length || '0';
+      this.dom.rightAvatar.textContent = String(memberCount || '0');
     } else {
+      // hide group meta for direct messages
+      const meta = document.getElementById('groupMeta');
+      if (meta) meta.style.display = 'none';
       this.dom.rightTitle.textContent = other?.name || 'Unknown';
       const online = this.state.onlineUsers.has(other?.user_public_id);
       this.dom.rightSub.textContent = online ? '🟢 Online' : '⚫ Offline';
@@ -924,7 +957,164 @@ const ChatApp = {
 
   // ===== GROUPS =====
   openGroupCreator() {
-    alert('Group creation coming soon');
+    const modal = document.getElementById('msgActionModal');
+    const title = document.getElementById('modalTitle');
+    const input = document.getElementById('modalInput');
+    const convoList = document.getElementById('modalConvoList');
+    const confirm = document.getElementById('modalConfirm');
+    const confirmText = document.getElementById('modalConfirmText');
+
+    title.textContent = 'Create New Group';
+    // hide delete confirmation text (only for delete operations)
+    confirmText.style.display = 'none';
+    // show name input
+    input.style.display = 'block';
+    input.placeholder = 'Group name';
+    input.value = '';
+
+    // build programme/level selectors + members container
+    convoList.innerHTML = `
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <select id="groupProgramme" style="flex:1; padding:8px; border-radius:6px; border:1px solid #e5e7eb;"></select>
+        <select id="groupLevel" style="width:120px; padding:8px; border-radius:6px; border:1px solid #e5e7eb;"></select>
+      </div>
+      <div id="groupMembersList" style="max-height:220px; overflow:auto; border:1px solid #eee; padding:8px; border-radius:6px;"></div>
+    `;
+
+    // show modal
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => modal.classList.add('show'));
+
+    confirm.textContent = 'Create Group';
+
+    // load programmes and levels
+    const loadProgrammes = async () => {
+      try {
+        const res = await fetch('/chat/programmes');
+        const data = await res.json();
+        const progSel = document.getElementById('groupProgramme');
+        const lvlSel = document.getElementById('groupLevel');
+        progSel.innerHTML = '<option value="">Select programme</option>' + (data.programmes || []).map(p => `<option value="${p}">${p}</option>`).join('');
+        lvlSel.innerHTML = '<option value="">Level</option>' + (data.levels || []).map(l => `<option value="${l}">${l}</option>`).join('');
+      } catch (err) {
+        console.warn('Failed to load programmes', err);
+      }
+    };
+
+    // keep selected members persistent across programme/level changes
+    const selectedMembers = new Set();
+    const memberNameMap = new Map(); // public_id -> display name
+
+    const loadStudents = async () => {
+      const prog = document.getElementById('groupProgramme').value;
+      const lvl = document.getElementById('groupLevel').value;
+      const list = document.getElementById('groupMembersList');
+      list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">Loading...</div>';
+      if (!prog || !lvl) { list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">Select programme and level to list students</div>'; return; }
+      try {
+        const res = await fetch(`/chat/students_by_programme?programme=${encodeURIComponent(prog)}&level=${encodeURIComponent(lvl)}`);
+        const data = await res.json();
+        if (!data.students || !data.students.length) { list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">No students found</div>'; return; }
+        list.innerHTML = data.students.map(s => {
+          // record name for later rendering in selected list
+          memberNameMap.set(s.public_id, s.name);
+          return `
+          <label data-pubid="${s.public_id}" style="display:flex; align-items:center; gap:12px; padding:10px 12px; margin-bottom:4px; border-radius:8px; cursor:pointer; transition:all 0.2s ease; background:#f9f9f9;">
+            <input type="checkbox" class="group-member-checkbox" value="${s.public_id}" style="width:18px; height:18px; cursor:pointer; flex-shrink:0;" ${selectedMembers.has(s.public_id) ? 'checked' : ''}>
+            <div style="flex:1; font-size:14px; font-weight:500; color:#333;">${s.name}</div>
+          </label>
+        `;
+        }).join('');
+        // Add hover effect and checkbox handlers
+        Array.from(list.querySelectorAll('label')).forEach(label => {
+          label.addEventListener('mouseenter', () => { label.style.backgroundColor = '#f0f0f0'; label.style.transform = 'translateX(4px)'; });
+          label.addEventListener('mouseleave', () => { label.style.backgroundColor = '#f9f9f9'; label.style.transform = 'translateX(0)'; });
+          const cb = label.querySelector('input.group-member-checkbox');
+          if (cb) {
+            cb.addEventListener('change', () => {
+              const id = cb.value;
+              if (cb.checked) selectedMembers.add(id); else selectedMembers.delete(id);
+            });
+          }
+        });
+        // if there is a view selected button, enable it
+        const viewBtn = document.getElementById('viewSelectedBtn');
+        if (viewBtn) {
+          viewBtn.onclick = () => {
+            const container = document.getElementById('selectedMembersContainer');
+            container.innerHTML = '';
+            if (!selectedMembers.size) {
+              container.innerHTML = '<div style="color:#666; padding:12px;">No members selected</div>';
+            } else {
+              Array.from(selectedMembers).forEach(id => {
+                const name = memberNameMap.get(id) || id;
+                const node = document.createElement('div');
+                node.style.display = 'flex';
+                node.style.justifyContent = 'space-between';
+                node.style.alignItems = 'center';
+                node.style.padding = '8px';
+                node.style.borderBottom = '1px solid #f0f0f0';
+                node.innerHTML = `<div style="font-weight:500; color:#222;">${name}</div><div style="color:#999; font-size:12px;">${id}</div>`;
+                container.appendChild(node);
+              });
+            }
+            document.getElementById('selectedMembersModal').style.display = 'block';
+          };
+        }
+      } catch (err) {
+        console.error('Failed to load students', err);
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">Failed to load students</div>';
+      }
+    };
+
+    // wire selectors
+    setTimeout(() => {
+      loadProgrammes().then(() => {
+        document.getElementById('groupProgramme').addEventListener('change', loadStudents);
+        document.getElementById('groupLevel').addEventListener('change', loadStudents);
+      });
+    }, 0);
+
+    // add a small 'View selected' control next to selectors
+    const viewBtnWrap = document.createElement('div');
+    viewBtnWrap.style.marginTop = '8px';
+    viewBtnWrap.innerHTML = '<button id="viewSelectedBtn" class="btn btn-sm" style="padding:6px 10px;">View selected</button>';
+    document.getElementById('groupMembersList').parentNode.insertBefore(viewBtnWrap, document.getElementById('groupMembersList'));
+
+    // close handler for side modal
+    const selectedModal = document.getElementById('selectedMembersModal');
+    const selectedBackdrop = document.getElementById('selectedMembersBackdrop');
+    const closeSelected = document.getElementById('closeSelectedModal');
+    if (selectedBackdrop) selectedBackdrop.addEventListener('click', () => { selectedModal.style.display = 'none'; });
+    if (closeSelected) closeSelected.addEventListener('click', () => { selectedModal.style.display = 'none'; });
+
+    // replace confirm handler
+    const newConfirm = confirm.cloneNode(true);
+    confirm.parentNode.replaceChild(newConfirm, confirm);
+    newConfirm.addEventListener('click', async () => {
+      const name = input.value.trim();
+      if (!name) return this.showError('Please provide a group name');
+      const checked = Array.from(selectedMembers);
+      if (!checked.length) return this.showError('Please select at least one member');
+      try {
+        const csrf = document.querySelector('meta[name="csrf-token"]').content;
+        const res = await fetch('/chat/conversations/create_group', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+          body: JSON.stringify({ name, members: checked })
+        });
+        if (!res.ok) throw new Error('Failed');
+        const data = await res.json();
+        this.showSuccess('Group created');
+        modal.classList.remove('show');
+        setTimeout(() => { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }, 250);
+        if (data && data.id) this.openConversation(data.id); else this.loadConversations();
+      } catch (err) {
+        console.error(err);
+        this.showError('Failed to create group');
+      }
+    });
   },
 
   // ===== MENU =====
@@ -993,6 +1183,7 @@ const ChatApp = {
     title.textContent = 'Add Members';
     input.placeholder = 'Enter member IDs (comma separated)';
     input.value = '';
+    document.getElementById('modalConfirmText').style.display = 'none';
     modal.style.display = 'block';
     
     confirm.onclick = async () => {
@@ -1093,19 +1284,7 @@ const ChatApp = {
       navigator.clipboard.writeText(msg.content);
       this.showSuccess('Copied to clipboard');
     } else if (action === 'forward') {
-      // Close the message menu first
-      const msgMenu = this.dom.msgContextMenu;
-      if (msgMenu) {
-        msgMenu.classList.add('slide-out');
-        setTimeout(() => {
-          msgMenu.style.display = 'none';
-          msgMenu.classList.remove('slide-out');
-        }, 200);
-      }
-      // Then show forward dialog
-      setTimeout(() => {
-        this.showForwardDialog(msg);
-      }, 250);
+      this.showForwardDialog(msg);
       shouldClose = false; // Don't close yet, let forward dialog handle it
     } else if (action === 'delete') {
       if (!isMine) return this.showError('Can only delete your own messages');
@@ -1145,159 +1324,136 @@ const ChatApp = {
 
   async showForwardDialog(msg) {
     console.log('📤 Forward dialog opening', {msg});
-    try {
-      const modal = document.getElementById('msgActionModal');
-      const title = document.getElementById('modalTitle');
-      const convoList = document.getElementById('modalConvoList');
-      const confirm = document.getElementById('modalConfirm');
-      
-      if (!modal) {
-        console.error('❌ Modal not found');
-        this.showError('Dialog not found');
-        return;
-      }
-      if (!confirm) {
-        console.error('❌ Confirm button not found');
-        this.showError('Button not found');
-        return;
-      }
-      
-      // Clear modal first
-      modal.className = 'modal'; // Reset all classes
-      
-      title.textContent = '📤 Forward Message';
-      
-      // Show message preview
-      const previewHTML = `
-        <div style="background: #f5f5f5; padding: 10px; border-radius: 6px; margin-bottom: 15px; border-left: 3px solid #007bff;">
-          <strong style="display: block; font-size: 0.9em; color: #666; margin-bottom: 5px;">Message to forward:</strong>
-          <p style="margin: 0; padding: 8px; background: white; border-radius: 4px; word-break: break-word;">${this.escapeHtml(msg.content)}</p>
+    const modal = document.getElementById('msgActionModal');
+    const title = document.getElementById('modalTitle');
+    const convoList = document.getElementById('modalConvoList');
+    const confirm = document.getElementById('modalConfirm');
+    
+    if (!modal) console.error('❌ Modal not found');
+    if (!confirm) console.error('❌ Confirm button not found');
+    
+    title.textContent = '📤 Forward Message';
+    
+    // Show message preview
+    const previewHTML = `
+      <div style="background: #f5f5f5; padding: 10px; border-radius: 6px; margin-bottom: 15px; border-left: 3px solid #007bff;">
+        <strong style="display: block; font-size: 0.9em; color: #666; margin-bottom: 5px;">Message to forward:</strong>
+        <p style="margin: 0; padding: 8px; background: white; border-radius: 4px; word-break: break-word;">${this.escapeHtml(msg.content)}</p>
+      </div>
+    `;
+    
+    // Build conversation list with better styling
+    const filteredConvos = this.state.conversations.filter(c => c.id !== this.state.currentConversationId);
+    console.log(`📋 ${filteredConvos.length} conversations available to forward to`);
+    
+    let convoHTML = previewHTML;
+    if (filteredConvos.length === 0) {
+      convoHTML += '<p style="padding: 15px; text-align: center; color: #999; background: #f9f9f9; border-radius: 6px;">No other conversations available</p>';
+    } else {
+      convoHTML += `
+        <div style="margin-bottom: 10px;">
+          <strong style="display: block; margin-bottom: 8px; color: #333;">Select conversation to forward to:</strong>
+          <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px;">
+            ${filteredConvos.map((c, idx) => {
+              const other = c.participants.find(p => p.user_public_id !== this.state.currentUserId) || c.participants[0];
+              const displayName = c.name || other?.name || 'Chat';
+              const lastMsg = c.last_message ? `${c.last_message.sender_name}: ${c.last_message.content.substring(0, 40)}${c.last_message.content.length > 40 ? '...' : ''}` : 'No messages yet';
+              const isGroup = c.type === 'group';
+              
+              return `
+                <label style="display: flex; align-items: center; padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; transition: all 0.2s; background: white;" 
+                       onmouseover="this.style.backgroundColor='#f9f9f9'" 
+                       onmouseout="this.style.backgroundColor='white'">
+                  <input type="radio" name="forward_convo" value="${c.id}" style="margin-right: 12px; cursor: pointer; width: 18px; height: 18px;">
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                      <strong style="color: #333;">${this.escapeHtml(displayName)}</strong>
+                      ${isGroup ? `<span style="font-size: 0.8em; color: #999; background: #f0f0f0; padding: 2px 6px; border-radius: 3px; margin-left: 6px;">${c.participants?.length || 0} members</span>` : ''}
+                    </div>
+                    <p style="margin: 0; font-size: 0.85em; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(lastMsg)}</p>
+                  </div>
+                </label>
+              `;
+            }).join('')}
+          </div>
         </div>
       `;
+    }
+    
+    convoList.innerHTML = convoHTML;
+    
+    document.getElementById('modalInput').style.display = 'none';
+    document.getElementById('modalConfirmText').style.display = 'none';
+    
+    // Ensure modal is visible
+    modal.style.display = 'flex';
+    modal.style.visibility = 'visible';
+    modal.style.opacity = '1';
+    
+    // Force a reflow to ensure CSS transitions work
+    void modal.offsetHeight;
+    
+    // Add show class for animations
+    modal.classList.add('show');
+    console.log('✅ Modal opened with forward dialog');
+    
+    confirm.textContent = 'Forward Message';
+    
+    // Clone to remove old listeners
+    const newConfirmBtn = confirm.cloneNode(true);
+    confirm.parentNode.replaceChild(newConfirmBtn, confirm);
+    const confirmBtn = document.getElementById('modalConfirm');
+    
+    // Add event listener
+    const forwardHandler = async (e) => {
+      console.log('🔔 Forward button clicked');
+      e.preventDefault();
+      e.stopPropagation();
       
-      // Build conversation list with better styling
-      const filteredConvos = this.state.conversations.filter(c => c.id !== this.state.currentConversationId);
-      console.log(`📋 ${filteredConvos.length} conversations available to forward to`);
+      const targetConvoId = document.querySelector('input[name="forward_convo"]:checked')?.value;
+      console.log('Target:', targetConvoId);
       
-      let convoHTML = previewHTML;
-      if (filteredConvos.length === 0) {
-        convoHTML += '<p style="padding: 15px; text-align: center; color: #999; background: #f9f9f9; border-radius: 6px;">No other conversations available</p>';
-      } else {
-        convoHTML += `
-          <div style="margin-bottom: 10px;">
-            <strong style="display: block; margin-bottom: 8px; color: #333;">Select conversation to forward to:</strong>
-            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px;">
-              ${filteredConvos.map((c, idx) => {
-                const other = c.participants.find(p => p.user_public_id !== this.state.currentUserId) || c.participants[0];
-                const displayName = c.name || other?.name || 'Chat';
-                const lastMsg = c.last_message ? `${c.last_message.sender_name}: ${c.last_message.content.substring(0, 40)}${c.last_message.content.length > 40 ? '...' : ''}` : 'No messages yet';
-                const isGroup = c.type === 'group';
-                
-                return `
-                  <label style="display: flex; align-items: center; padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; transition: all 0.2s; background: white;" 
-                         onmouseover="this.style.backgroundColor='#f9f9f9'" 
-                         onmouseout="this.style.backgroundColor='white'">
-                    <input type="radio" name="forward_convo" value="${c.id}" style="margin-right: 12px; cursor: pointer; width: 18px; height: 18px;">
-                    <div style="flex: 1; min-width: 0;">
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                        <strong style="color: #333;">${this.escapeHtml(displayName)}</strong>
-                        ${isGroup ? `<span style="font-size: 0.8em; color: #999; background: #f0f0f0; padding: 2px 6px; border-radius: 3px; margin-left: 6px;">${c.participants?.length || 0} members</span>` : ''}
-                      </div>
-                      <p style="margin: 0; font-size: 0.85em; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(lastMsg)}</p>
-                    </div>
-                  </label>
-                `;
-              }).join('')}
-            </div>
-          </div>
-        `;
+      if (!targetConvoId) {
+        this.showError('Select a conversation');
+        return;
       }
       
-      convoList.innerHTML = convoHTML;
-      
-      // Hide other elements
-      const modalInput = document.getElementById('modalInput');
-      const modalConfirmText = document.getElementById('modalConfirmText');
-      if (modalInput) modalInput.style.display = 'none';
-      if (modalConfirmText) modalConfirmText.textContent = '';
-      
-      // Show modal
-      modal.style.display = 'flex';
-      modal.style.visibility = 'visible';
-      modal.style.opacity = '1';
-      
-      // Add show class for animations
-      setTimeout(() => {
-        modal.classList.add('show');
-      }, 10);
-      
-      confirm.textContent = 'Forward Message';
-      
-      // Clone to remove old listeners
-      const newConfirmBtn = confirm.cloneNode(true);
-      confirm.parentNode.replaceChild(newConfirmBtn, confirm);
-      const confirmBtn = document.getElementById('modalConfirm');
-      
-      // Create properly bound handler
-      const self = this;
-      const forwardHandler = async (e) => {
-        try {
-          console.log('🔔 Forward button clicked');
-          e.preventDefault();
-          e.stopPropagation();
-          e.returnValue = false;
-          
-          const targetConvoId = document.querySelector('input[name="forward_convo"]:checked')?.value;
-          console.log('Target:', targetConvoId);
-          
-          if (!targetConvoId) {
-            self.showError('Select a conversation');
-            return;
-          }
-          
-          const csrf = document.querySelector('meta[name="csrf-token"]').content;
-          const messageBody = {
-            message: `[Forwarded] ${msg.content}`,
-            reply_to_message_id: null
-          };
-          console.log('📤 Sending:', messageBody);
-          
-          const res = await fetch(`/chat/conversations/${targetConvoId}/messages`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-            body: JSON.stringify(messageBody)
-          });
-          
-          console.log('Response:', res.status);
-          const data = await res.json();
-          console.log('Response data:', data);
-          
-          if (data.success) {
-            self.showSuccess('Message forwarded!');
-            modal.classList.remove('show');
-            setTimeout(() => {
-              modal.style.display = 'none';
-              modal.style.visibility = 'hidden';
-            }, 300);
-            setTimeout(() => {
-              self.loadConversations();
-            }, 100);
-          } else {
-            self.showError(data.error || 'Forward failed');
-          }
-        } catch (err) {
-          console.error('Forward error:', err);
-          self.showError('Error: ' + err.message);
+      try {
+        const csrf = document.querySelector('meta[name="csrf-token"]').content;
+        const messageBody = {
+          message: `[Forwarded] ${msg.content}`,
+          reply_to_message_id: null
+        };
+        console.log('📤 Sending:', messageBody);
+        
+        const res = await fetch(`/chat/conversations/${targetConvoId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+          body: JSON.stringify(messageBody)
+        });
+        
+        console.log('Response:', res.status);
+        const data = await res.json();
+        console.log('Response data:', data);
+        
+        if (data.success) {
+          this.showSuccess('Message forwarded!');
+          modal.classList.remove('show');
+          setTimeout(() => {
+            modal.style.display = 'none';
+          }, 300);
+          this.loadConversations();
+        } else {
+          this.showError(data.error || 'Forward failed');
         }
-      };
-      
-      confirmBtn.addEventListener('click', forwardHandler, { once: false });
-      console.log('✅ Forward handler attached');
-    } catch (err) {
-      console.error('❌ showForwardDialog error:', err);
-      this.showError('Failed to open forward dialog');
-    }
-  },
+      } catch (err) {
+        console.error('Forward error:', err);
+        this.showError('Error: ' + err.message);
+      }
+    };
+    
+    confirmBtn.addEventListener('click', forwardHandler);
+    console.log('✅ Forward handler attached');
   },
 
   async showReactionPicker(msg) {
@@ -1309,7 +1465,7 @@ const ChatApp = {
     
     title.textContent = 'Add Reaction';
     document.getElementById('modalInput').style.display = 'none';
-    document.getElementById('modalConfirmText').textContent = '';
+    document.getElementById('modalConfirmText').style.display = 'none';
     
     convoList.innerHTML = reactions
       .map(emoji => `<button style="padding: 10px 15px; margin: 4px; font-size: 20px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; background: white;" data-emoji="${emoji}">${emoji}</button>`)

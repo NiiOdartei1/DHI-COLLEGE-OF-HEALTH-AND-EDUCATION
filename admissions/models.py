@@ -107,6 +107,8 @@ class Application(db.Model):
     admitted_semester = db.Column(db.String(10))
     admission_letter_generated = db.Column(db.Boolean, default=False)
     acceptance_letter_generated = db.Column(db.Boolean, default=False)
+    student_type = db.Column(db.String(20), default='online')  # 'online' or 'regular' - determines LMS access
+    applicant_study_format = db.Column(db.String(50))  # what applicant selected (Regular, Online, Weekend, etc)
 
     # -------------------
     # Relationships
@@ -119,6 +121,26 @@ class Application(db.Model):
     def full_name(self):
         parts = [self.surname, self.first_name, self.other_names]
         return " ".join([p for p in parts if p])
+    
+    @property
+    def display_study_format(self):
+        """Return the study format to display - applicant's choice or admin's assigned one"""
+        if self.admitted_stream:
+            return self.admitted_stream
+        elif self.applicant_study_format:
+            return self.applicant_study_format
+        else:
+            return 'Regular'
+    
+    @property
+    def display_student_type(self):
+        """Return human-readable student type"""
+        if self.student_type == 'online':
+            return 'Online Student'
+        elif self.student_type == 'regular':
+            return 'Regular Student'
+        else:
+            return self.student_type
 
 class ApplicationDocument(db.Model):
     __tablename__ = 'application_document'

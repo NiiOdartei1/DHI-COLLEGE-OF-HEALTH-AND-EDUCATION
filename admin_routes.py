@@ -751,7 +751,9 @@ def register_continuing_student():
         
         programme = request.form.get('current_programme', '').strip()
         level_str = request.form.get('programme_level', '').strip()
-        study_format = request.form.get('study_format', 'Regular').strip()
+        student_type = request.form.get('student_type', 'online').strip()  # New: online or regular
+        # Auto-derive study_format from student_type
+        study_format = 'Online' if student_type == 'online' else 'Regular'
         academic_year = request.form.get('academic_year', '').strip()
         semester = request.form.get('semester', '').strip()
 
@@ -883,7 +885,8 @@ def register_continuing_student():
                 guardian_phone=request.form.get('guardian_phone', '').strip(),
                 guardian_email=request.form.get('guardian_email', '').strip(),
                 guardian_address=request.form.get('guardian_address', '').strip(),
-                admission_date=datetime.now().date()
+                admission_date=datetime.now().date(),
+                student_type=student_type  # New: online or regular student
             )
             db.session.add(student_profile)
             db.session.commit()
@@ -3054,18 +3057,29 @@ MODELS = {
     "Users": User,
     "Students": StudentProfile,
     "Teachers": TeacherProfile,
+    "Password Reset Requests": PasswordResetRequest,
+    "Password Reset Tokens": PasswordResetToken,
+    "Programme Cohorts": ProgrammeCohort,
+    "School Settings": SchoolSettings,
     "Fee Structures": ProgrammeFeeStructure,
     "Fee Transactions": StudentFeeTransaction,
     "Fee Balances": StudentFeeBalance,
     "Quizzes": Quiz,
     "Questions": Question,
     "Options": Option,
+    "Quiz Attempts": QuizAttempt,
+    "Student Answers": StudentAnswer,
     "Quiz Submissions": StudentQuizSubmission,
     "Assignments": Assignment,
+    "Assignment Submissions": AssignmentSubmission,
     "Course Materials": CourseMaterial,
     "Courses": Course,
     "Course Limits": CourseLimit,
     "Registrations": StudentCourseRegistration,
+    "Course Assessment Schemes": CourseAssessmentScheme,
+    "Student Course Grades": StudentCourseGrade,
+    "Grading Scales": GradingScale,
+    "Semester Result Releases": SemesterResultRelease,
     "Timetable": TimetableEntry,
     "Teacher-Course Assignments": TeacherCourseAssignment,
     "Attendance": AttendanceRecord,
@@ -3076,18 +3090,26 @@ MODELS = {
     "Exams": Exam,
     "Exam Sets": ExamSet,
     "Exam Questions": ExamQuestion,
+    "Exam Set Questions": ExamSetQuestion,
     "Exam Options": ExamOption,
     "Exam Submissions": ExamSubmission,
     "Exam Attempts": ExamAttempt,
     "Exam Answers": ExamAnswer,
-    "Notices": Notification,
+    "Exam Timetable": ExamTimetableEntry,
+    "Notifications": Notification,
+    "Notification Recipients": NotificationRecipient,
+    "Notification Preferences": NotificationPreference,
+    "Meetings": Meeting,
+    "Recordings": Recording,
+    "Conversations": Conversation,
+    "Conversation Participants": ConversationParticipant,
     "Messages": Message,
     "Message Reactions": MessageReaction,
     "Teacher Assessment Periods": TeacherAssessmentPeriod,
     "Teacher Assessment Questions": TeacherAssessmentQuestion,
     "Teacher Assessments": TeacherAssessment,
     "Teacher Assessment Answers": TeacherAssessmentAnswer,
-    #"Chat Messages": Message
+    "Student Promotions": StudentPromotion,
 }
 
 @admin_bp.route("/settings/result-template", methods=["GET", "POST"])
@@ -4529,6 +4551,97 @@ def mark_fee_paid(fee_id):
 
     return redirect(url_for('admin.assign_fees'))
 
+# ============================================================
+# FEE PAYMENT RULES MANAGEMENT
+# ============================================================
+
+@admin_bp.route('/fee-payment-rules', methods=['GET', 'POST'])
+@login_required
+@require_finance_admin
+def manage_fee_payment_rules():
+    """Super admin / Finance admin can manage fee payment rules for student groups"""
+    from models import FeePaymentRule
+    
+    if request.method == 'POST':
+        programme_name = request.form.get('programme_name', '*')
+        programme_level = request.form.get('programme_level', '*')
+        study_format = request.form.get('study_format', '*')
+        academic_year = request.form.get('academic_year', None) or None
+        minimum_percentage = float(request.form.get('minimum_percentage', 0.0))
+        allow_installments = request.form.get('allow_installments') == 'on'
+        payment_deadline_days = request.form.get('payment_deadline_days')
+        
+        payment_deadline_days = int(payment_deadline_days) if payment_deadline_days and payment_deadline_days.strip() else None
+        
+        # Validation
+        if minimum_percentage < 0 or minimum_percentage > 100:
+            flash("Minimum percentage must be between 0 and 100.", "danger")
+            return redirect(url_for('admin.manage_fee_payment_rules'))
+        
+        # Check if rule already exists
+        existing = FeePaymentRule.query.filter_by(
+            programme_name=programme_name,
+            programme_level=programme_level,
+            study_format=study_format,
+            academic_year=academic_year
+        ).first()
+        
+        if existing:
+            # Update existing rule
+            existing.minimum_payment_percentage = minimum_percentage
+            existing.allow_installments = allow_installments
+            existing.payment_deadline_days = payment_deadline_days
+            existing.updated_at = datetime.utcnow()
+            db.session.commit()
+            flash(f"✓ Fee payment rule updated successfully.", "success")
+        else:
+            # Create new rule
+            rule = FeePaymentRule(
+                programme_name=programme_name,
+                programme_level=programme_level,
+                study_format=study_format,
+                academic_year=academic_year,
+                minimum_payment_percentage=minimum_percentage,
+                allow_installments=allow_installments,
+                payment_deadline_days=payment_deadline_days,
+                created_by_admin_id=current_user.id if hasattr(current_user, 'id') else None
+            )
+            db.session.add(rule)
+            db.session.commit()
+            flash(f"✓ New fee payment rule created successfully.", "success")
+        
+        return redirect(url_for('admin.manage_fee_payment_rules'))
+    
+    # GET: Display all rules
+    rules = FeePaymentRule.query.order_by(FeePaymentRule.created_at.desc()).all()
+    
+    # Get available programmes and levels for dropdowns
+    from models import ProgrammeFeeStructure
+    programmes = db.session.query(ProgrammeFeeStructure.programme_name).distinct().all()
+    programmes = [p[0] for p in programmes if p[0]]
+    programmes.sort()
+    
+    return render_template('admin/manage_fee_payment_rules.html', rules=rules, programmes=programmes)
+
+@admin_bp.route('/fee-payment-rules/<int:rule_id>/delete', methods=['POST'])
+@login_required
+@require_finance_admin
+def delete_fee_payment_rule(rule_id):
+    """Delete a fee payment rule"""
+    from models import FeePaymentRule
+    
+    rule = FeePaymentRule.query.get_or_404(rule_id)
+    
+    try:
+        db.session.delete(rule)
+        db.session.commit()
+        flash(f"✓ Fee payment rule deleted successfully.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error deleting rule: {str(e)}", "danger")
+    
+    return redirect(url_for('admin.manage_fee_payment_rules'))
+
 @admin_bp.route('/review-payments')
 @login_required
 @require_finance_admin
@@ -5124,6 +5237,16 @@ def update_application_status(app_id, new_status):
                 admission_date=datetime.utcnow().date()
             )
 
+            # Use admitted_stream if admin set it, otherwise auto-derive from student_type
+            # Otherwise use what applicant selected on the program choice page (first_stream)
+            if application.admitted_stream:
+                study_format_final = application.admitted_stream
+            else:
+                # Use what applicant selected on the program choice page (first_stream)
+                study_format_final = application.first_stream or 'Regular'
+            
+            # Determine student_type: use application's student_type ('online' or 'regular')
+            student_type_final = application.student_type or 'online'
             student_profile = StudentProfile(
                 user_id=new_user.user_id,
                 dob=application.dob,
@@ -5141,7 +5264,8 @@ def update_application_status(app_id, new_status):
 
                 current_programme=application.admitted_programme or application.first_choice,
                 programme_level=100,
-                study_format=application.admitted_stream or 'Regular',
+                study_format=study_format_final,
+                student_type=student_type_final,  # ✅ CRITICAL: Set student_type from application
 
                 # ✅ NEW SYSTEM
                 index_number=generated_index,
@@ -5174,7 +5298,7 @@ def update_application_status(app_id, new_status):
             fee_structures = ProgrammeFeeStructure.query.filter_by(
                 programme_name=programme_name,
                 programme_level='100',
-                study_format=application.admitted_stream or 'Regular'
+                study_format=study_format_final
             ).all()
             
             if fee_structures:
@@ -5204,7 +5328,9 @@ def update_application_status(app_id, new_status):
                     }
 
             # Send credentials with fees info
-            send_approval_credentials_email(application, username, student_id, temp_password, fees_info)
+            # Include information about student type in email
+            student_type = application.student_type
+            send_approval_credentials_email(application, username, student_id, temp_password, fees_info, student_type=student_type)
 
         # ================= REJECTED =================
         elif new_status == 'rejected':

@@ -15,7 +15,7 @@
           </p>
         </div>
         <div>
-          <button class="btn btn-outline-primary" onclick="window.print()">
+          <button class="btn btn-outline-primary no-print" onclick="handlePrint()">
             <i class="fas fa-print"></i> Print
           </button>
         </div>
@@ -195,10 +195,216 @@
   </div>
 </div>
 
+<script>
+  function handlePrint() {
+    // Set a print flag
+    document.body.classList.add('printing');
+    
+    // Trigger print dialog
+    window.print();
+    
+    // Remove flag after print dialog closes
+    window.addEventListener('afterprint', function() {
+      document.body.classList.remove('printing');
+    });
+  }
+</script>
+
 <style>
+  .no-print {
+    display: print;
+  }
+
   @media print {
-    .btn, .alert { display: none; }
-    .card { box-shadow: none !important; border: 1px solid #dee2e6 !important; }
+    /* Hide interactive elements */
+    .btn, .alert, .no-print {
+      display: none !important;
+    }
+
+    /* Print header */
+    .container-fluid {
+      padding: 0 !important;
+      max-width: 100% !important;
+    }
+
+    body {
+      margin: 0;
+      padding: 10mm;
+      font-family: Arial, sans-serif;
+    }
+
+    /* Page styling */
+    @page {
+      size: A4;
+      margin: 10mm;
+    }
+
+    /* Header styling */
+    .row.mb-4:first-child {
+      margin-bottom: 15mm !important;
+      page-break-after: avoid;
+    }
+
+    h2 {
+      font-size: 18pt !important;
+      margin-bottom: 5mm !important;
+      color: #000 !important;
+    }
+
+    /* Summary cards */
+    .row.mb-4 .card {
+      border: 1px solid #000 !important;
+      box-shadow: none !important;
+      page-break-inside: avoid;
+      margin-bottom: 3mm !important;
+    }
+
+    .card-body {
+      padding: 8mm !important;
+    }
+
+    .card-body h3 {
+      font-size: 14pt !important;
+      color: #000 !important;
+    }
+
+    .card-body p {
+      font-size: 10pt !important;
+      color: #000 !important;
+      margin-bottom: 2mm !important;
+    }
+
+    .text-primary, .text-success, .text-warning, .text-danger {
+      color: #000 !important;
+    }
+
+    /* Table styling */
+    .table {
+      font-size: 10pt !important;
+      border-collapse: collapse !important;
+      width: 100% !important;
+      margin-bottom: 0 !important;
+    }
+
+    .table thead {
+      background-color: #f0f0f0 !important;
+      display: table-header-group;
+      page-break-after: avoid;
+    }
+
+    .table th {
+      background-color: #f0f0f0 !important;
+      color: #000 !important;
+      border: 1px solid #999 !important;
+      padding: 3mm !important;
+      font-weight: bold !important;
+      text-align: left !important;
+    }
+
+    .table td {
+      border: 1px solid #ccc !important;
+      padding: 3mm !important;
+      color: #000 !important;
+      page-break-inside: avoid;
+    }
+
+    .table tbody tr {
+      page-break-inside: avoid;
+    }
+
+    .table tbody tr:nth-child(odd) {
+      background-color: #fff !important;
+    }
+
+    .table tbody tr:hover {
+      background-color: #fff !important;
+    }
+
+    /* Badge styling */
+    .badge {
+      border: 1px solid #000 !important;
+      color: #000 !important;
+      background-color: #fff !important;
+      padding: 2mm !important;
+      margin-right: 2mm !important;
+    }
+
+    /* Summary footer */
+    .border-top {
+      border-top: 2px solid #000 !important;
+      background-color: #f0f0f0 !important;
+      page-break-before: avoid;
+      margin-top: 5mm !important;
+      padding: 5mm !important;
+    }
+
+    .border-top p {
+      font-size: 10pt !important;
+      margin-bottom: 3mm !important;
+      color: #000 !important;
+    }
+
+    .border-top strong {
+      color: #000 !important;
+    }
+
+    .float-end {
+      float: right !important;
+    }
+
+    /* Alert box styling */
+    .alert {
+      border: 1px solid #000 !important;
+      background-color: #fff !important;
+      color: #000 !important;
+      margin-top: 10mm !important;
+      padding: 5mm !important;
+    }
+
+    /* Card styling */
+    .card {
+      border: 1px solid #000 !important;
+      box-shadow: none !important;
+      page-break-inside: avoid;
+    }
+
+    .card-header {
+      background-color: #f0f0f0 !important;
+      border-bottom: 2px solid #000 !important;
+    }
+
+    .card-header h5 {
+      color: #000 !important;
+      font-size: 12pt !important;
+    }
+
+    /* Text colors */
+    .text-muted {
+      color: #666 !important;
+    }
+
+    /* Responsive table for print */
+    .table-responsive {
+      overflow: visible !important;
+    }
+
+    /* Print text alignment */
+    .text-center {
+      text-align: center !important;
+    }
+
+    /* Hide unnecessary columns or adjust */
+    @media print and (max-width: 1000px) {
+      .table th, .table td {
+        font-size: 9pt !important;
+        padding: 2mm !important;
+      }
+    }
+
+    /* Ensure images and icons don't print */
+    i.fas {
+      display: none !important;
+    }
   }
 </style>
 

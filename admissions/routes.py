@@ -154,13 +154,58 @@ def verify_email():
 
         if success:
             login_user(applicant)
+            # ensure applicant_id is stored in session so subsequent admission steps work
+            session['applicant_id'] = applicant.id
+            # clear pending email marker
+            session.pop('pending_email', None)
             flash("Email verified successfully!", "success")
-            # Redirect to voucher authentication page
-            return redirect(url_for('admissions.voucher_authentication'))
+            # Redirect to student type choice
+            return redirect(url_for('admissions.choose_student_type'))
 
         flash(message, "danger")
 
     return render_template('admissions/verify_email.html')
+
+@admissions_bp.route('/choose-student-type', methods=['GET', 'POST'])
+def choose_student_type():
+    """
+    Route for applicant to choose between Online Student and Regular Student
+    Online students get full access to LMS features (quizzes, assignments, exams, materials, chat)
+    Regular students only go through admissions process, no LMS access
+    """
+    applicant_id = session.get('applicant_id')
+    if not applicant_id:
+        flash('Please login to continue.', 'warning')
+        return redirect(url_for('admissions.login'))
+    
+    applicant = Applicant.query.get(applicant_id)
+    if not applicant:
+        flash('Applicant not found.', 'danger')
+        return redirect(url_for('admissions.login'))
+    
+    if request.method == 'POST':
+        student_type = request.form.get('student_type', 'online').strip()
+        
+        # Validate student_type
+        if student_type not in ['online', 'regular']:
+            flash('Invalid student type selected.', 'danger')
+            return render_template('admissions/choose_student_type.html')
+        
+        # Store in session for later use when creating application
+        session['student_type'] = student_type
+        
+        # Also store in the Application if it exists, or it will be stored when created
+        app_row = Application.query.filter_by(applicant_id=applicant_id).first()
+        if app_row:
+            app_row.student_type = student_type
+            # Store display format based on student type
+            app_row.applicant_study_format = 'Online' if student_type == 'online' else 'Regular'
+            db.session.commit()
+        
+        # Redirect to voucher authentication
+        return redirect(url_for('admissions.voucher_authentication'))
+    
+    return render_template('admissions/choose_student_type.html')
 
 @admissions_bp.route('/resend-verification', methods=['POST'])
 def resend_verification():
@@ -234,7 +279,8 @@ def voucher_authentication():
                 app_row = Application.query.filter_by(applicant_id=applicant_id).first()
                 if not app_row:
                     # create application row if missing
-                    app_row = Application(applicant_id=applicant_id, status='draft')
+                    student_type = session.get('student_type', 'online')
+                    app_row = Application(applicant_id=applicant_id, status='draft', student_type=student_type)
                     db.session.add(app_row)
                     db.session.commit()
 
@@ -252,9 +298,19 @@ def voucher_authentication():
         # ensure applicant has an application row
         app_row = Application.query.filter_by(applicant_id=applicant_id).first()
         if not app_row:
-            app_row = Application(applicant_id=applicant_id, status='draft')
+            student_type = session.get('student_type', 'online')
+            app_row = Application(applicant_id=applicant_id, status='draft', student_type=student_type)
+            # Store applicant's study format choice
+            app_row.applicant_study_format = 'Online' if student_type == 'online' else 'Regular'
             db.session.add(app_row)
             db.session.commit()
+        else:
+            # Ensure the student_type is set if not already
+            if not app_row.student_type:
+                student_type = session.get('student_type', 'online')
+                app_row.student_type = student_type
+                app_row.applicant_study_format = 'Online' if student_type == 'online' else 'Regular'
+                db.session.commit()
 
         flash("Voucher successfully authenticated! You may continue your application.", "success")
         next_route = get_next_application_step(app_row) or 'admissions.dashboard'

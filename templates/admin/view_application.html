@@ -79,6 +79,35 @@
     </div>
 </div>
 
+<!-- STUDY TYPE SELECTION (NEW) -->
+<div class="card shadow-sm border-0 mb-2" style="background-color: #f8f9fa;">
+    <div class="card-header fw-semibold fs-8" style="padding: 0.5rem 1rem;">Study Type Selection</div>
+    <div class="card-body p-2">
+        <div class="row g-2">
+            <div class="col-md-6">
+                <strong class="fs-8">Type Selected:</strong> 
+                <span class="badge {% if application.student_type == 'online' %}bg-success{% else %}bg-info{% endif %} fs-8">
+                    {% if application.student_type == 'online' %}
+                        🌐 Online Student (Full LMS Access)
+                    {% else %}
+                        📋 Regular Student (Admissions Only)
+                    {% endif %}
+                </span>
+            </div>
+            <div class="col-md-6">
+                <strong class="fs-8">Study Format:</strong> 
+                <span class="fs-8">
+                    {% if application.student_type == 'online' %}
+                        Online
+                    {% else %}
+                        Regular
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- EXAM RESULTS -->
 <div class="card shadow-sm border-0 mb-2">
     <div class="card-header fw-semibold fs-8" style="padding: 0.5rem 1rem;">Academic Results</div>

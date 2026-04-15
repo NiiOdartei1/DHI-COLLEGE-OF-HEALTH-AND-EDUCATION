@@ -8,6 +8,7 @@ from flask import Blueprint, render_template, abort, flash, redirect, url_for, r
 from flask_login import login_required, current_user
 from io import BytesIO
 from datetime import datetime
+from weasyprint import HTML
 
 from services.transcript_service import TranscriptService
 from services.semester_grading_service import SemesterGradingService
@@ -80,13 +81,11 @@ def create_student_transcript_blueprint():
 
         return render_template('student/transcript_unified.html', transcript=transcript, mode='full')
     
-    @transcript_bp.route('/download/semester/<path:academic_year>/<semester>')
+    @transcript_bp.route('/download/pdf/semester/<path:academic_year>/<semester>')
     @login_required
-    def download_semester(academic_year, semester):
+    def download_semester_pdf(academic_year, semester):
         """
-        Download semester transcript as text file.
-        
-        Returns a .txt file with formatted transcript.
+        Download semester transcript as PDF using WeasyPrint.
         """
         if not current_user.is_student:
             abort(403)
@@ -102,28 +101,33 @@ def create_student_transcript_blueprint():
             flash("Transcript not found.", "warning")
             return redirect(url_for('student_transcript.current_semester'))
         
-        # Generate text export
-        text_content = TranscriptService.export_semester_transcript_text(transcript)
+        # Generate HTML
+        html_content = TranscriptService.generate_semester_transcript_html(transcript)
         
-        # Create file-like object
-        file_bytes = BytesIO(text_content.encode('utf-8'))
-        
-        filename = f"Transcript_{academic_year.replace('/', '-')}_Sem{semester}.txt"
-        
-        return send_file(
-            file_bytes,
-            mimetype='text/plain',
-            as_attachment=True,
-            download_name=filename
-        )
+        # Convert HTML to PDF using WeasyPrint
+        try:
+            pdf_file = BytesIO()
+            HTML(string=html_content).write_pdf(pdf_file)
+            pdf_file.seek(0)
+            
+            filename = f"Transcript_{academic_year.replace('/', '-')}_Sem{semester}.pdf"
+            
+            return send_file(
+                pdf_file,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=filename
+            )
+        except Exception as e:
+            flash(f"Error generating PDF: {str(e)}", "danger")
+            return redirect(url_for('student_transcript.semester_specific', 
+                                  academic_year=academic_year, semester=semester))
     
-    @transcript_bp.route('/download/full')
+    @transcript_bp.route('/download/pdf/full')
     @login_required
-    def download_full():
+    def download_full_pdf():
         """
-        Download full transcript as text file.
-        
-        Returns a .txt file with complete academic history.
+        Download full transcript as PDF using WeasyPrint.
         """
         if not current_user.is_student:
             abort(403)
@@ -134,21 +138,27 @@ def create_student_transcript_blueprint():
             flash("Transcript not found.", "warning")
             return redirect(url_for('student_transcript.current_semester'))
         
-        # Generate text export
-        text_content = TranscriptService.export_full_transcript_text(transcript)
+        # Generate HTML
+        html_content = TranscriptService.generate_full_transcript_html(transcript)
         
-        # Create file-like object
-        file_bytes = BytesIO(text_content.encode('utf-8'))
-        
-        student_name = current_user.full_name.replace(' ', '_')
-        filename = f"Full_Transcript_{student_name}.txt"
-        
-        return send_file(
-            file_bytes,
-            mimetype='text/plain',
-            as_attachment=True,
-            download_name=filename
-        )
+        # Convert HTML to PDF using WeasyPrint
+        try:
+            pdf_file = BytesIO()
+            HTML(string=html_content).write_pdf(pdf_file)
+            pdf_file.seek(0)
+            
+            student_name = current_user.full_name.replace(' ', '_')
+            filename = f"Full_Transcript_{student_name}.pdf"
+            
+            return send_file(
+                pdf_file,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=filename
+            )
+        except Exception as e:
+            flash(f"Error generating PDF: {str(e)}", "danger")
+            return redirect(url_for('student_transcript.full_transcript'))
     
     @transcript_bp.route('/api/semester/<path:academic_year>/<semester>')
     @login_required

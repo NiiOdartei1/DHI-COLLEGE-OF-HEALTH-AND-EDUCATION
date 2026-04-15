@@ -67,5 +67,6 @@ class Config:
     # ZOOM (OPTIONAL)
     # ------------------------------------------------------
     ZOOM_ACCOUNT_ID = os.environ.get("ZOOM_ACCOUNT_ID")
+    ZOOM_ACCOUNT_EMAIL = os.environ.get("ZOOM_ACCOUNT_EMAIL")
     ZOOM_CLIENT_ID = os.environ.get("ZOOM_CLIENT_ID")
     ZOOM_CLIENT_SECRET = os.environ.get("ZOOM_CLIENT_SECRET")

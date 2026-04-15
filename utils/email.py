@@ -165,10 +165,35 @@ Online Admissions Portal
 
     return send_email(applicant.email, subject, body)
 
-def send_approval_credentials_email(applicant, username, student_id, temp_password, fees_info=None):
+def send_approval_credentials_email(applicant, username, student_id, temp_password, fees_info=None, student_type='online'):
     name = _get_applicant_name(applicant)
 
     subject = "Your Student Account is Ready – Online Admissions Portal"
+
+    # Build LMS access message based on student type
+    lms_access_message = ""
+    if student_type == 'online':
+        lms_access_message = """
+    <hr>
+    <h3>Learning Management System (LMS) Access</h3>
+    <p>As an <b>Online Student</b>, you have full access to the Learning Management System where you can:</p>
+    <ul>
+        <li>View course materials and class notes</li>
+        <li>Complete assignments and quizzes</li>
+        <li>Participate in online exams</li>
+        <li>Access the class chat and discussions</li>
+        <li>Check your grades and academic records</li>
+    </ul>
+        """
+    else:  # regular student
+        lms_access_message = """
+    <hr>
+    <h3>Admissions Status</h3>
+    <p>You are registered as a <b>Regular Student</b> pursuing admission through the regular admissions process. 
+    You will receive further communication regarding your programme placement, payment schedules, and next steps.</p>
+    <p><b>Note:</b> As a regular student, you will not have access to the Learning Management System (LMS) features 
+    until your admission is fully processed and enrolled as an online student.</p>
+        """
 
     fees_section = ""
     if fees_info:
@@ -219,6 +244,8 @@ def send_approval_credentials_email(applicant, username, student_id, temp_passwo
         <a href="{url_for('admissions.login', _external=True)}">Online Admissions Portal</a>
         and change your password.
     </p>
+
+    {lms_access_message}
 
     {fees_section}
 

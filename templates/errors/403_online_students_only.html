@@ -1,0 +1,211 @@
+{% extends "student/base_student.html" %}
+
+{% block title %}Access Restricted - Online Students Only{% endblock %}
+
+{% block content %}
+<div class="container my-1">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      
+      <!-- Main Error Card -->
+      <div class="card shadow-lg border-0 rounded-lg" style="background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);">
+        <div class="card-body p-5 text-center">
+          
+          <!-- Large Error Icon -->
+          <div class="mb-4">
+            <i class="bi bi-lock-fill" style="font-size: 4rem; color: #dc3545;"></i>
+          </div>
+          
+          <!-- Main Heading -->
+          <h1 class="fw-bold text-danger mb-2">Access Restricted</h1>
+          <p class="text-muted fs-5 mb-4">This feature is only available to <strong>Online Students</strong></p>
+          
+          <!-- Alert Box -->
+          <div class="alert alert-warning border-2 border-warning rounded-lg p-4 mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>You are currently registered as a <span class="badge bg-muted text-dark">Regular Student</span></strong>
+            <p class="mt-2 mb-0">Regular students have limited access to the Learning Management System.</p>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Comparison Cards -->
+      <div class="row mt-5 g-4">
+        
+        <!-- Regular Student Card (Current) -->
+        <div class="col-md-6">
+          <div class="card h-100 border-2 border-secondary rounded-lg">
+            <div class="card-header bg-light border-secondary">
+              <h5 class="card-title mb-0">
+                <i class="bi bi-person-check text-secondary me-2"></i>
+                Your Status: Regular Student
+              </h5>
+            </div>
+            <div class="card-body">
+              <p class="text-muted small mb-3">You have access to:</p>
+              <ul class="list-unstyled">
+                <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>Admissions portal</li>
+                <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>Application tracking</li>
+                <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>Fee management</li>
+                <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>Student profile</li>
+                <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i>General notifications</li>
+              </ul>
+              <hr>
+              <p class="text-muted small mb-0"><strong>Note:</strong> You cannot access LMS features like courses, exams, quizzes, or materials.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Online Student Card (What You're Missing) -->
+        <div class="col-md-6">
+          <div class="card h-100 border-2 border-primary rounded-lg" style="background: linear-gradient(to bottom right, rgba(13,110,253,0.05), transparent);">
+            <div class="card-header bg-primary text-white">
+              <h5 class="card-title mb-0">
+                <i class="bi bi-cloud-check me-2"></i>
+                Online Student (Full Access)
+              </h5>
+            </div>
+            <div class="card-body">
+              <p class="text-muted small mb-3">Online students get full access to:</p>
+              <ul class="list-unstyled">
+                <li class="mb-2"><i class="bi bi-check-circle text-primary me-2"></i>Attend virtual classes</li>
+                <li class="mb-2"><i class="bi bi-check-circle text-primary me-2"></i>Take quizzes & exams</li>
+                <li class="mb-2"><i class="bi bi-check-circle text-primary me-2"></i>Submit assignments</li>
+                <li class="mb-2"><i class="bi bi-check-circle text-primary me-2"></i>Access course materials</li>
+                <li class="mb-2"><i class="bi bi-check-circle text-primary me-2"></i>Message instructors</li>
+                <li class="mb-2"><i class="bi bi-check-circle text-primary me-2"></i>View grades & transcripts</li>
+              </ul>
+              <hr>
+              <p class="text-muted small mb-0"><strong>Plus:</strong> All the features available to regular students.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Why This Restriction? -->
+      <div class="card mt-5 border-0 shadow-sm mb-4">
+        <div class="card-header bg-light border-bottom-0">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-info-circle me-2 text-info"></i>
+            Why This Restriction?
+          </h5>
+        </div>
+        <div class="card-body">
+          <p class="mb-3">
+            Your admission application was processed as a <strong>Regular Student</strong> during the application process. 
+            This determination was made based on:
+          </p>
+          <ul class="mb-0">
+            <li><strong>Study Format Selected:</strong> Regular (No online LMS access)</li>
+            <li><strong>Program Requirements:</strong> Your chosen program does not require full LMS participation</li>
+            <li><strong>Admission Type:</strong> You were admitted through the regular admissions pathway</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Requested Feature Details -->
+      <div class="card mt-4 border-warning border-2 mb-4">
+        <div class="card-header bg-light">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-lock-fill me-2 text-warning"></i>
+            Feature You're Trying to Access
+          </h5>
+        </div>
+        <div class="card-body">
+          <p class="text-muted mb-2"><strong>Type:</strong> <span class="badge bg-warning text-dark">LMS Feature</span></p>
+          <p class="text-muted mb-0">
+            This page contains learning management system content that is restricted to online students only. 
+            If you believe this is an error or would like to request access, please contact the admissions office.
+          </p>
+        </div>
+      </div>
+
+      <!-- What To Do Next -->
+      <div class="card mt-4 border-success border-2">
+        <div class="card-header bg-light">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-arrow-right-circle me-2 text-success"></i>
+            What Can You Do?
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="d-flex">
+                <div class="flex-shrink-0 me-3">
+                  <i class="bi bi-telephone h-5 text-success" style="font-size: 1.5rem;"></i>
+                </div>
+                <div class="flex-grow-1">
+                  <h6 class="mb-1">Contact Admissions</h6>
+                  <p class="text-muted small mb-0">
+                    Reach out to the admissions office to discuss your study format options and whether an upgrade to Online Student status is available.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="d-flex">
+                <div class="flex-shrink-0 me-3">
+                  <i class="bi bi-file-text h-5 text-success" style="font-size: 1.5rem;"></i>
+                </div>
+                <div class="flex-grow-1">
+                  <h6 class="mb-1">Submit a Request</h6>
+                  <p class="text-muted small mb-0">
+                    If your circumstances have changed and you'd like to upgrade your study format, submit a formal request through the admissions portal.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Support Contact -->
+      <div class="alert alert-info mt-4 rounded-lg" role="alert">
+        <i class="bi bi-support me-2"></i>
+        <strong>Need Help?</strong> Contact our support team:
+        <ul class="mb-0 mt-2">
+          <li><strong>Email:</strong> <a href="mailto:admissions@institution.edu">admissions@institution.edu</a></li>
+          <li><strong>Phone:</strong> <a href="tel:+1234567890">+1 (234) 567-8900</a></li>
+          <li><strong>Office Hours:</strong> Monday - Friday, 8:00 AM - 5:00 PM</li>
+        </ul>
+      </div>
+
+      <!-- Back Button -->
+      <div class="d-grid gap-2 mt-5 mb-4">
+        <button onclick="history.back()" class="btn btn-outline-secondary btn-lg">
+          <i class="bi bi-arrow-left me-2"></i>Go Back
+        </button>
+        <a href="{{ url_for('student.dashboard') }}" class="btn btn-primary btn-lg">
+          <i class="bi bi-house-door me-2"></i>Return to Student Portal
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+  .card {
+    transition: all 0.3s ease;
+  }
+  
+  .card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+  }
+  
+  .border-bottom-0 {
+    border-bottom: 0 !important;
+  }
+  
+  .rounded-lg {
+    border-radius: 0.75rem;
+  }
+  
+  ul li {
+    line-height: 1.8;
+  }
+</style>
+{% endblock %}

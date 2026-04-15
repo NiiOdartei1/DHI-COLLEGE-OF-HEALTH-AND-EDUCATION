@@ -118,6 +118,21 @@ def inject_active_assessment_period():
             return None
     return {'active_assessment_period': get_active_period}
 
+
+@app.context_processor
+def inject_is_online_student():
+    """Expose `is_online_student` boolean to templates for UI gating.
+
+    Usage in templates:
+      {% if is_online_student %} show LMS links {% endif %}
+    """
+    try:
+        if current_user and hasattr(current_user, 'student_profile') and current_user.is_authenticated:
+            return {'is_online_student': bool(current_user.student_profile.is_online_student)}
+    except Exception:
+        pass
+    return {'is_online_student': False}
+
 # ===== Custom Jinja2 Filters =====
 @app.template_filter('floatformat')
 def floatformat(value, decimals=2):
