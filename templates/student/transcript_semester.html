@@ -273,7 +273,7 @@
                 <div class="card-body">
                     {% set current_status = semester_statuses[0] if semester_statuses else {} %}
                     {% if current_status.grade_distribution %}
-                        <canvas id="gradeChart"></canvas>
+                        <canvas id="gradeChart" data-distribution="{{ current_status.grade_distribution|tojson }}"></canvas>
                     {% else %}
                         <p class="text-muted">No grades entered yet.</p>
                     {% endif %}
@@ -335,7 +335,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Only draw chart if we have data
     const chartElement = document.getElementById('gradeChart');
-    const distribution = {{ current_status.grade_distribution|default({})|tojson }};
+    const distribution = chartElement ? JSON.parse(chartElement.dataset.distribution || '{}') : {};
     if (chartElement && Object.keys(distribution).length) {
         
         const labels = Object.keys(distribution);

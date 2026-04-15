@@ -79,7 +79,7 @@
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
     <div class="container-fluid">
       <a class="navbar-brand d-flex align-items-center" href="{{ url_for('home') }}">
-        🎓 <span class="ms-2">MyLMS</span>
+        🎓 <span class="ms-2">DHI College of Health and Education</span>
       </a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu">
         <span class="navbar-toggler-icon"></span>
@@ -123,20 +123,19 @@
 
   <!-- Notification Badge Update Script -->
   <script>
-    {% if current_user.is_authenticated %}
     // Update notification count every 30 seconds
     function updateNotificationCount() {
+        const badge = document.getElementById('notif-badge');
+        if (!badge) return; // Only run if notification badge exists (authenticated user)
+        
         fetch('/notifications/api/count')
             .then(response => response.json())
             .then(data => {
                 const count = data.count || 0;
-                const badge = document.getElementById('notif-badge');
                 const countEl = document.getElementById('notif-count');
                 if (countEl) {
                     countEl.textContent = count;
-                    if (badge) {
-                        badge.style.display = count > 0 ? 'block' : 'none';
-                    }
+                    badge.style.display = count > 0 ? 'block' : 'none';
                 }
             })
             .catch(err => console.error('Notification update failed:', err));
@@ -151,7 +150,6 @@
     
     // Check every 30 seconds
     setInterval(updateNotificationCount, 30000);
-    {% endif %}
   </script>
 
   <!-- Main Content -->

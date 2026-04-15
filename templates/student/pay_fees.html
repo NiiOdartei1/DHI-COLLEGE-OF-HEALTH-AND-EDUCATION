@@ -168,6 +168,7 @@
                 <input type="hidden" name="semester" id="semesterHidden" value="{{ semester or '' }}">
                 <input type="hidden" id="remainingValue" value="{{ "%.2f"|format(remaining if remaining>0 else 0) }}">
                 <input type="hidden" id="allowInstallments" value="{{ '1' if allow_installments else '0' }}">
+                <input type="hidden" id="studentLevel" value="{{ student_level }}">
 
                 <div class="row g-3">
                   <div class="col-md-6">
@@ -326,7 +327,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Variables from hidden inputs
   const remaining = parseFloat(remainingValueEl.value || '0');
   const allowInstallments = document.getElementById('allowInstallments').value === '1';
-  const studentLevel = {{ student_level }};  // From Jinja template context
+  const studentLevel = parseInt(document.getElementById('studentLevel').value || '0');
 
   function syncHiddenFilters() {
     yearHidden.value = yearSelect.value;
