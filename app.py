@@ -1,14 +1,3 @@
-# ===== GTK RUNTIME FIX FOR WEASYPRINT (Windows) =====
-import os
-import sys
-
-if sys.platform == "win32":
-    gtk_path = r"C:\Program Files\GTK3-Runtime Win64\bin"
-    if os.path.exists(gtk_path):
-        os.add_dll_directory(gtk_path)
-        os.environ["PATH"] = gtk_path + ";" + os.environ["PATH"]
-# ================================================
-
 # app.py - My LMS — Bulletproof Startup
 
 import os
@@ -41,8 +30,11 @@ app = Flask(__name__)
 app.config.from_object(Config)
 
 # ===== Paths =====
-DB_PATH = os.path.join(app.instance_path, "lms.db")
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DB_PATH}"
+# Database URI is set in config.py - don't override it here
+# For local development without DATABASE_URL, fallback to SQLite
+if not os.environ.get("DATABASE_URL"):
+    DB_PATH = os.path.join(app.instance_path, "lms.db")
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DB_PATH}"
 app.config.setdefault('SESSION_TYPE', 'sqlalchemy')
 app.config['SESSION_SQLALCHEMY'] = db
 app.config.setdefault('SESSION_SQLALCHEMY_TABLE', 'sessions')

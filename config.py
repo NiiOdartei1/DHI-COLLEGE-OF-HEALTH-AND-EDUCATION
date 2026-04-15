@@ -34,18 +34,27 @@ class Config:
     # ------------------------------------------------------
     # FILE UPLOADS
     # ------------------------------------------------------
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads", "assignments")
-    MATERIALS_FOLDER = os.path.join(BASE_DIR, "uploads", "materials")
-
-    PAYMENT_PROOF_FOLDER = os.path.join(
-        BASE_DIR, "static", "uploads", "payments"
-    )
-    RECEIPT_FOLDER = os.path.join(
-        BASE_DIR, "static", "uploads", "receipts"
-    )
-    PROFILE_PICS_FOLDER = os.path.join(
-        BASE_DIR, "static", "uploads", "profile_pictures"
-    )
+    # For Render.com, use the persistent disk mount path
+    RENDER_DISK_PATH = os.environ.get("RENDER_DISK_PATH", "")
+    
+    if RENDER_DISK_PATH:
+        UPLOAD_FOLDER = os.path.join(RENDER_DISK_PATH, "uploads", "assignments")
+        MATERIALS_FOLDER = os.path.join(RENDER_DISK_PATH, "uploads", "materials")
+        PAYMENT_PROOF_FOLDER = os.path.join(RENDER_DISK_PATH, "payment_proofs")
+        RECEIPT_FOLDER = os.path.join(RENDER_DISK_PATH, "receipts")
+        PROFILE_PICS_FOLDER = os.path.join(RENDER_DISK_PATH, "profile_pictures")
+    else:
+        UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads", "assignments")
+        MATERIALS_FOLDER = os.path.join(BASE_DIR, "uploads", "materials")
+        PAYMENT_PROOF_FOLDER = os.path.join(
+            BASE_DIR, "static", "uploads", "payments"
+        )
+        RECEIPT_FOLDER = os.path.join(
+            BASE_DIR, "static", "uploads", "receipts"
+        )
+        PROFILE_PICS_FOLDER = os.path.join(
+            BASE_DIR, "static", "uploads", "profile_pictures"
+        )
 
     # ------------------------------------------------------
     # EMAIL (Flask-Mailman – GMAIL)
